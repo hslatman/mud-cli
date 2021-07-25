@@ -1,0 +1,67 @@
+name: Go
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    strategy:
+      fail-fast: true
+      matrix:
+        go-version: 
+          - "1.16"
+        os: 
+          - ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    steps:
+    - name: Install Go
+      uses: actions/setup-go@v2
+      with:
+        go-version: ${{ matrix.go-version }}
+    - name: Checkout code
+      uses: actions/checkout@v2
+      with:
+        fetch-depth: 0 # Note the fetch-depth: 0 option on the Checkout workflow step. It is required for the change log to work correctly.
+  
+    - name: Build
+      run: go build -v ./...
+
+    - name: Test
+      run: go test -v ./...
+
+    - name: Run GoReleaser
+      uses: goreleaser/goreleaser-action@56f5b77f7fa4a8fe068bf22b732ec036cc9bc13f # using commit hash instead of 'v2' because this uses the GITHUB_TOKEN, see https://julienrenaux.fr/2019/12/20/github-actions-security-risk/
+      with:
+        version: latest
+        args: release --rm-dist
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        GO_VERSION: ${{ matrix.go-version }}
+
+
+    # only continue if the tag was pushed onto the main branch
+    # seems to not be working (currently) and is therefore commented out
+    # if: contains(github.ref, '/heads/main')
+
+    # steps:
+    # - name: Install Go
+    #   uses: actions/setup-go@v2
+    #   with:
+    #     go-version: ${{ matrix.go-version }}
+
+    # - name: Checkout code
+    #   uses: actions/checkout@v2
+    #   with:
+    #     fetch-depth: 0 # Note the fetch-depth: 0 option on the Checkout workflow step. It is required for the change log to work correctly.
+  
+    # - name: Run GoReleaser
+    #   uses: goreleaser/goreleaser-action@56f5b77f7fa4a8fe068bf22b732ec036cc9bc13f # using commit hash instead of 'v2' because this uses the GITHUB_TOKEN, see https://julienrenaux.fr/2019/12/20/github-actions-security-risk/
+    #   with:
+    #     version: latest
+    #     args: release --rm-dist
+    #   env:
+    #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    #     GO_VERSION: ${{ matrix.go-version }}
