@@ -33,6 +33,11 @@ This application is a tool to generate the needed files
 to quickly create a Cobra application.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		fmt.Println("view called")
+
+		// TODO: check if file exists or download temp copy
+		// TODO: serve the file locally; temporarily
+		// TODO: open browser; show MUD Visualizer with the chosen MUD file
+		//
 	},
 }
 

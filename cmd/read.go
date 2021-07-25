@@ -17,11 +17,11 @@ package cmd
 
 import (
 	"fmt"
-	"io/ioutil"
 
 	"github.com/openconfig/ygot/ygot"
 	"github.com/spf13/cobra"
 
+	"github.com/hslatman/mud-cli/internal"
 	"github.com/hslatman/mud.yang.go/pkg/mudyang"
 )
 
@@ -38,16 +38,14 @@ to quickly create a Cobra application.`,
 	Args: cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 
-		fileToRead := args[0]
-
-		json, err := ioutil.ReadFile(fileToRead)
+		json, err := internal.Contents(args[0])
 		if err != nil {
-			println(fmt.Sprintf("File could not be read: %v", err))
+			fmt.Println(err)
 			return
 		}
 
 		mud := &mudyang.Mudfile{}
-		if err := mudyang.Unmarshal([]byte(json), mud); err != nil {
+		if err := mudyang.Unmarshal(json, mud); err != nil {
 			println(fmt.Sprintf("Can't unmarshal JSON: %v", err))
 			return
 		}

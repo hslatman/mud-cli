@@ -17,8 +17,8 @@ package cmd
 
 import (
 	"fmt"
-	"io/ioutil"
 
+	"github.com/hslatman/mud-cli/internal"
 	"github.com/hslatman/mud.yang.go/pkg/mudyang"
 	"github.com/openconfig/ygot/ytypes"
 	"github.com/spf13/cobra"
@@ -36,20 +36,20 @@ This application is a tool to generate the needed files
 to quickly create a Cobra application.`,
 	Args: cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		fileToRead := args[0]
 
-		json, err := ioutil.ReadFile(fileToRead)
+		filepath := args[0]
+		json, err := internal.Contents(filepath)
 		if err != nil {
-			println(fmt.Sprintf("File could not be read: %v", err))
+			fmt.Println(err)
 			return
 		}
 
 		mud := &mudyang.Mudfile{}
-		if err := mudyang.Unmarshal([]byte(json), mud); err != nil {
+		if err := mudyang.Unmarshal(json, mud); err != nil {
 			println(fmt.Sprintf("Can't unmarshal JSON: %v", err))
 			return
 		}
-
+		// TODO: more validation options?
 		options := &ytypes.LeafrefOptions{
 			IgnoreMissingData: false,
 			Log:               true,
@@ -58,6 +58,9 @@ to quickly create a Cobra application.`,
 			println(fmt.Sprintf("Error validating MUD: %v", err))
 			return
 		}
+
+		// TODO: some way to get more errors at once, if possible?
+		// Or some nicer output.
 
 		println("MUD file is valid")
 	},
