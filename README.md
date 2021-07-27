@@ -9,6 +9,8 @@ The access control policies described in a MUD File allow network controllers to
 
 ## Things that can be done
 
+* Fix (most) TODOs ... :-)
+* Replace calls to fmt with proper logging
 * A command for generating MUD files (from pcap or some different way)
 * A command for editing MUD files (i.e. metadata)
 * A command that initializes a .mud directory inside user HOME, that is used for intermediate storage? If necessary, of course.

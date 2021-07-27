@@ -19,6 +19,7 @@ import (
 	"fmt"
 
 	"github.com/openconfig/ygot/ygot"
+	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
 	"github.com/hslatman/mud-cli/internal"
@@ -36,18 +37,15 @@ Cobra is a CLI library for Go that empowers applications.
 This application is a tool to generate the needed files
 to quickly create a Cobra application.`,
 	Args: cobra.MinimumNArgs(1),
-	Run: func(cmd *cobra.Command, args []string) {
-
+	RunE: func(cmd *cobra.Command, args []string) error {
 		json, err := internal.Contents(args[0])
 		if err != nil {
-			fmt.Println(err)
-			return
+			return errors.Wrap(err, "error reading file contents")
 		}
 
 		mud := &mudyang.Mudfile{}
 		if err := mudyang.Unmarshal(json, mud); err != nil {
-			println(fmt.Sprintf("Can't unmarshal JSON: %v", err))
-			return
+			return errors.Wrap(err, "can't unmarshal JSON")
 		}
 
 		// TODO: print a summary instead of the full JSON?
@@ -58,15 +56,15 @@ to quickly create a Cobra application.`,
 			RFC7951Config: &ygot.RFC7951JSONConfig{
 				AppendModuleName: true,
 			},
-			SkipValidation: false,
+			SkipValidation: false, // TODO: provide flag to skip?
 		})
-
 		if err != nil {
-			println(fmt.Sprintf("JSON error: %v", err))
-			return
+			return errors.Wrap(err, "could not marshal MUD file into JSON")
 		}
 
-		println(jsonString)
+		fmt.Println(jsonString)
+
+		return nil
 	},
 }
 

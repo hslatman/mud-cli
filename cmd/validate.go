@@ -21,6 +21,7 @@ import (
 	"github.com/hslatman/mud-cli/internal"
 	"github.com/hslatman/mud.yang.go/pkg/mudyang"
 	"github.com/openconfig/ygot/ytypes"
+	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 )
 
@@ -35,19 +36,17 @@ Cobra is a CLI library for Go that empowers applications.
 This application is a tool to generate the needed files
 to quickly create a Cobra application.`,
 	Args: cobra.MinimumNArgs(1),
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 
 		filepath := args[0]
 		json, err := internal.Contents(filepath)
 		if err != nil {
-			fmt.Println(err)
-			return
+			return errors.Wrap(err, "error reading file contents")
 		}
 
 		mud := &mudyang.Mudfile{}
 		if err := mudyang.Unmarshal(json, mud); err != nil {
-			println(fmt.Sprintf("Can't unmarshal JSON: %v", err))
-			return
+			return errors.Wrap(err, "can't unmarshal JSON")
 		}
 		// TODO: more validation options?
 		options := &ytypes.LeafrefOptions{
@@ -56,13 +55,15 @@ to quickly create a Cobra application.`,
 		}
 		if err = mud.Validate(options); err != nil {
 			println(fmt.Sprintf("Error validating MUD: %v", err))
-			return
+			return errors.Wrap(err, "Error validating MUD")
 		}
 
 		// TODO: some way to get more errors at once, if possible?
 		// Or some nicer output.
 
-		println("MUD file is valid")
+		fmt.Println("MUD is valid")
+
+		return nil
 	},
 }
 

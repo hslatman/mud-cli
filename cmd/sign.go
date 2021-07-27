@@ -33,6 +33,7 @@ import (
 	"github.com/hslatman/mud-cli/internal"
 	"github.com/hslatman/mud.yang.go/pkg/mudyang"
 	"github.com/openconfig/ygot/ygot"
+	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"go.step.sm/crypto/keyutil"
 	"go.step.sm/crypto/pemutil"
@@ -49,47 +50,68 @@ Cobra is a CLI library for Go that empowers applications.
 This application is a tool to generate the needed files
 to quickly create a Cobra application.`,
 	Args: cobra.MinimumNArgs(1),
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 
 		filepath := args[0]
 		json, err := internal.Contents(filepath)
 		if err != nil {
-			fmt.Println(err)
-			return
+			return errors.Wrapf(err, "retrieving contents from %s failed", filepath)
 		}
 
-		mud := &mudyang.Mudfile{}
-		if err := mudyang.Unmarshal(json, mud); err != nil {
-			fmt.Printf("unmarshaling JSON failed: %s\n", err)
-			return
+		mudfile := &mudyang.Mudfile{}
+		if err := mudyang.Unmarshal(json, mudfile); err != nil {
+			return errors.Wrapf(err, "unmarshaling JSON failed")
 		}
 
-		if mudHasSignature(mud) {
-			fmt.Printf("this MUD already has a signature available at: %s\n", *mud.Mud.MudSignature)
-			return
-		}
+		// TODO: provide flag to override an existing signature
+		// if mudHasSignature(mud) {
+		// 	fmt.Printf("this MUD already has a signature available at: %s\n", *mud.Mud.MudSignature)
+		// 	return
+		// }
 
 		signaturePath, err := internal.SignaturePath(filepath)
 		fmt.Println("signature path: ", signaturePath)
 		if err != nil {
-			fmt.Println(err)
-			return
+			return errors.Wrap(err, "retrieving signature path from MUD failed")
 		}
 
-		// TODO: update Mudfile with location for signature?
+		// TODO: update Mudfile with location for signature? Needs to be clear that it has indeed be changed.
+		// TODO: if signing a local file, provide argument for the full path or directory for the signature file, so
+		// that the right value can be added to the MUD file before signing.
 
-		jsonString, err := ygot.EmitJSON(mud, &ygot.EmitJSONConfig{
+		output, err := ygot.DeepCopy(mudfile)
+		if err != nil {
+			return errors.Wrap(err, "creating deep copy of MUD YANG representation failed")
+		}
+
+		outputMudfile, ok := output.(*mudyang.Mudfile)
+		if !ok {
+			return errors.New("the output MUD YANG is not a *mudyang.Mudfile")
+		}
+
+		// TODO: if changing the signature, should we update the updated_at too? And/or others?
+		outputMudfile.Mud.MudSignature = &signaturePath
+
+		n, err := ygot.Diff(mudfile, outputMudfile)
+		if err != nil {
+			return errors.Wrap(err, "diffing the input and output MUD file failed")
+		}
+
+		// TODO: after diffing, check only expected number of changes were made
+		log.Println("diff: ", n)
+
+		//jsonString, err := ygot.EmitJSON(outputMudfile, &ygot.EmitJSONConfig{
+		jsonString, err := ygot.EmitJSON(mudfile, &ygot.EmitJSONConfig{
 			Format: ygot.RFC7951,
 			Indent: "  ",
 			RFC7951Config: &ygot.RFC7951JSONConfig{
 				AppendModuleName: true,
 			},
 			SkipValidation: false,
-			// TODO: validation options?
+			// TODO: other validation options?
 		})
 		if err != nil {
-			fmt.Printf("could not marshal MUD file into JSON: %s\n", err)
-			return
+			return errors.Wrap(err, "could not marshal MUD file into JSON")
 		}
 
 		data := []byte(jsonString)
@@ -102,37 +124,31 @@ to quickly create a Cobra application.`,
 		keyFile := fp.Join(mudRootDir, "key.pem")
 		certFile := fp.Join(mudRootDir, "cert.pem")
 		if !fileExists(keyFile) {
-			certBytes, keyBytes := generateKey()
+			certBytes, keyBytes := generateKey() // TODO: this logic should probably go somewhere different; a key + CSR should be created and sent to CA for a signed cert.
 			cert, err = x509.ParseCertificate(certBytes)
 			if err != nil {
-				fmt.Println(err)
-				return
+				return errors.Wrap(err, "parsing certificate failed")
 			}
 			_, err = pemutil.Serialize(cert, pemutil.ToFile(certFile, 0600))
 			if err != nil {
-				fmt.Println(err)
-				return
+				return errors.Wrapf(err, "serializing certificate to %s failed", certFile)
 			}
 			key, err = x509.ParsePKCS8PrivateKey(keyBytes)
 			if err != nil {
-				fmt.Println(err)
-				return
+				return errors.Wrap(err, "parsing private key failed")
 			}
 			_, err = pemutil.Serialize(key, pemutil.ToFile(keyFile, 0600), pemutil.WithPassword([]byte("1234"))) // TODO: provide password or prompt for it
 			if err != nil {
-				fmt.Println(err)
-				return
+				return errors.Wrapf(err, "serializing private key to %s failed", keyFile)
 			}
 		} else {
 			cert, err = pemutil.ReadCertificate(certFile)
 			if err != nil {
-				fmt.Println(err)
-				return
+				return errors.Wrapf(err, "reading certificate from %s failed", certFile)
 			}
 			k, err := pemutil.Read(keyFile, pemutil.WithPassword([]byte("1234")))
 			if err != nil {
-				fmt.Println(err)
-				return
+				return errors.Wrapf(err, "reading private key from %s failed", keyFile)
 			}
 			key = k
 		}
@@ -141,35 +157,35 @@ to quickly create a Cobra application.`,
 		fmt.Println(key)
 		fmt.Println(fmt.Sprintf("%T", key))
 
-		// TODO: add intermediates? Or how to integrate with a (private, trusted) CA?
+		// TODO: add intermediates? Or how to integrate with a (private, trusted) CA? RFC says that they MUST be added.
 		certs := []*x509.Certificate{cert}
 
 		// TODO: allow signing with some other signer, too?
-		signer, ok := key.(*ecdsa.PrivateKey)
+		signer, ok := key.(crypto.Signer)
 		if !ok {
-			fmt.Println("not a signer")
-			return
+			return errors.New("key is not a signer")
 		}
 
+		// TODO: add signed timestamp?
 		signature, err := cms.SignDetached(data, certs, signer)
 		if err != nil {
-			fmt.Println(err)
-			return
+			return errors.Wrap(err, "signing data failed")
 		}
 
 		// TODO: write to different location, based on signaturepath and close to the MUD file
+		// TODO: also provide an option to encode it to PEM instead?
 		newSignaturePath := fp.Join(mudRootDir, "signature.der")
 		err = ioutil.WriteFile(newSignaturePath, signature, 0644)
 		if err != nil {
-			fmt.Println(err)
-			return
+			return errors.Wrap(err, "writing DER signature failed")
 		}
 
 		fmt.Println(signature)
 
 		// TODO: print output on how/where to store the file + signature?
 
-		fmt.Println("success")
+		log.Println("MUD file signed successfully")
+		return nil
 	},
 }
 
@@ -186,6 +202,7 @@ func publicKey(priv interface{}) interface{} {
 
 func generateKey() (certBytes, keyBytes []byte) {
 	priv, err := keyutil.GenerateKey("EC", "P-256", 0)
+	//priv, err := keyutil.GenerateKey("RSA", "", 2048)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -193,13 +210,13 @@ func generateKey() (certBytes, keyBytes []byte) {
 	template := x509.Certificate{
 		SerialNumber: big.NewInt(1),
 		Subject: pkix.Name{
-			Organization: []string{"Acme Co"}, // TODO: change settings
+			Organization: []string{"mudsign example organization"},
 		},
-		NotBefore: time.Now(),
-		NotAfter:  time.Now().Add(time.Hour * 24 * 180),
-
-		KeyUsage:              x509.KeyUsageDigitalSignature,
+		NotBefore:             time.Now(),
+		NotAfter:              time.Now().Add(time.Hour * 24 * 180),
+		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageDigitalSignature, // TODO: fix usage? Would actually be better if this was more like a separate command, I guess
 		ExtKeyUsage:           []x509.ExtKeyUsage{},
+		IsCA:                  true,
 		BasicConstraintsValid: true,
 	}
 

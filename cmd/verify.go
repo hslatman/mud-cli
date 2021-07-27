@@ -19,12 +19,14 @@ import (
 	"crypto/x509"
 	"fmt"
 	"io/ioutil"
+	"log"
 	fp "path/filepath"
 
 	cms "github.com/github/ietf-cms"
 	"github.com/hslatman/mud-cli/internal"
 	"github.com/hslatman/mud.yang.go/pkg/mudyang"
 	"github.com/openconfig/ygot/ygot"
+	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"go.step.sm/crypto/pemutil"
 )
@@ -39,32 +41,26 @@ and usage of using your command. For example:
 Cobra is a CLI library for Go that empowers applications.
 This application is a tool to generate the needed files
 to quickly create a Cobra application.`,
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		filepath := args[0]
 		json, err := internal.Contents(filepath)
 		if err != nil {
-			fmt.Println(err)
-			return
+			return errors.Wrap(err, "error reading file contents")
 		}
 
 		mud := &mudyang.Mudfile{}
 		if err := mudyang.Unmarshal(json, mud); err != nil {
-			fmt.Printf("unmarshaling JSON failed: %s\n", err)
-			return
-		}
-
-		// TODO: update Mudfile with location for signature?
-		if mudHasSignature(mud) {
-			fmt.Printf("this MUD already has a signature available at: %s\n", *mud.Mud.MudSignature)
-			return
+			return errors.Wrap(err, "can't unmarshal JSON")
 		}
 
 		signaturePath, err := internal.SignaturePath(filepath)
 		fmt.Println("signature path: ", signaturePath)
 		if err != nil {
-			fmt.Println(err)
-			return
+			return errors.Wrap(err, "retrieving signature path from MUD failed")
 		}
+
+		// TODO: read MUD signature file location from MUD file, retrieve it and verify using that one
+		// TODO: allow for providing the signature file as an argument
 
 		jsonString, err := ygot.EmitJSON(mud, &ygot.EmitJSONConfig{
 			Format: ygot.RFC7951,
@@ -75,8 +71,7 @@ to quickly create a Cobra application.`,
 			SkipValidation: false,
 		})
 		if err != nil {
-			fmt.Printf("could not marshal MUD file into JSON: %s\n", err)
-			return
+			return errors.Wrap(err, "could not marshal MUD file into JSON")
 		}
 
 		data := []byte(jsonString)
@@ -87,40 +82,36 @@ to quickly create a Cobra application.`,
 		certFile := fp.Join(mudRootDir, "cert.pem")
 		cert, err = pemutil.ReadCertificate(certFile)
 		if err != nil {
-			fmt.Println(err)
-			return
+			return errors.Wrapf(err, "reading certificate from %s failed", certFile)
 		}
 
 		// TODO: provide additional information for verification,
 		// amongst which are the signature file, the mud file and CA root
 
-		// TODO: write to different location, based on signaturepath and close to the MUD file
+		// TODO: write to different location, based on signaturepath and close to the MUD file (if not online)
 		newSignaturePath := fp.Join(mudRootDir, "signature.der")
 		der, err := ioutil.ReadFile(newSignaturePath)
 		if err != nil {
-			fmt.Println(err)
-			return
+			return errors.Wrap(err, "reading DER signature file failed")
 		}
 
 		sd, err := cms.ParseSignedData(der)
 		if err != nil {
-			fmt.Println(err)
-			return
+			return errors.Wrap(err, "parsing signed data failed")
 		}
 
 		pool := x509.NewCertPool()
-		pool.AddCert(cert) // TODO: add different root (or system root, if trusted); optional flag/param
+		pool.AddCert(cert)
 		options := x509.VerifyOptions{
-			Roots: pool, // TODO: make this optional; now it's like a self-signed cert
+			Roots: pool, // TODO: make this optional with the CA to trust; now it's like a self-signed cert
 		}
 		if _, err := sd.VerifyDetached(data, options); err != nil {
-			fmt.Println(err)
-			return
+			return errors.Wrap(err, "verifying data failed")
 		}
 
-		// TODO: print output on how/where to store the file + signature?
+		log.Println("MUD verified successfully")
 
-		fmt.Println("success")
+		return nil
 	},
 }
 
