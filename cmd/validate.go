@@ -19,8 +19,6 @@ import (
 	"fmt"
 
 	"github.com/hslatman/mud-cli/internal"
-	"github.com/hslatman/mud.yang.go/pkg/mudyang"
-	"github.com/openconfig/ygot/ytypes"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 )
@@ -28,39 +26,22 @@ import (
 // validateCmd represents the validate command
 var validateCmd = &cobra.Command{
 	Use:   "validate",
-	Short: "A brief description of your command",
-	Long: `A longer description that spans multiple lines and likely contains examples
-and usage of using your command. For example:
-
-Cobra is a CLI library for Go that empowers applications.
-This application is a tool to generate the needed files
-to quickly create a Cobra application.`,
-	Args: cobra.MinimumNArgs(1),
+	Short: "Validates a MUD file to be formatted correctly",
+	Args:  cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 
 		filepath := args[0]
-		json, err := internal.Contents(filepath)
+		mudfile, err := internal.ReadMUDFileFrom(filepath)
 		if err != nil {
-			return errors.Wrap(err, "error reading file contents")
+			return errors.Wrapf(err, "could not get contents from %s", filepath)
 		}
 
-		mud := &mudyang.Mudfile{}
-		if err := mudyang.Unmarshal(json, mud); err != nil {
-			return errors.Wrap(err, "can't unmarshal JSON")
-		}
-		// TODO: more validation options?
-		options := &ytypes.LeafrefOptions{
-			IgnoreMissingData: false,
-			Log:               true,
-		}
-		if err = mud.Validate(options); err != nil {
-			println(fmt.Sprintf("Error validating MUD: %v", err))
-			return errors.Wrap(err, "Error validating MUD")
+		err = internal.Validate(mudfile)
+		if err != nil {
+			return errors.Wrap(err, "error validating MUD file")
 		}
 
-		// TODO: some way to get more errors at once, if possible?
-		// Or some nicer output.
-
+		// TODO: some way to get more errors at once, if possible? Or some nicer output.
 		fmt.Println("MUD is valid")
 
 		return nil
@@ -69,14 +50,4 @@ to quickly create a Cobra application.`,
 
 func init() {
 	rootCmd.AddCommand(validateCmd)
-
-	// Here you will define your flags and configuration settings.
-
-	// Cobra supports Persistent Flags which will work for this command
-	// and all subcommands, e.g.:
-	// validateCmd.PersistentFlags().String("foo", "", "A help for foo")
-
-	// Cobra supports local flags which will only run when this command
-	// is called directly, e.g.:
-	// validateCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 }

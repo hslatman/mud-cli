@@ -18,51 +18,32 @@ package cmd
 import (
 	"fmt"
 
-	"github.com/openconfig/ygot/ygot"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
 	"github.com/hslatman/mud-cli/internal"
-	"github.com/hslatman/mud.yang.go/pkg/mudyang"
 )
 
 // readCmd represents the read command
 var readCmd = &cobra.Command{
 	Use:   "read",
-	Short: "A brief description of your command",
-	Long: `A longer description that spans multiple lines and likely contains examples
-and usage of using your command. For example:
-
-Cobra is a CLI library for Go that empowers applications.
-This application is a tool to generate the needed files
-to quickly create a Cobra application.`,
-	Args: cobra.MinimumNArgs(1),
+	Short: "Reads and prints MUD file contents",
+	Args:  cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		json, err := internal.Contents(args[0])
+
+		filepath := args[0]
+		mudfile, err := internal.ReadMUDFileFrom(filepath)
 		if err != nil {
-			return errors.Wrap(err, "error reading file contents")
+			return errors.Wrap(err, "could not get contents")
 		}
 
-		mud := &mudyang.Mudfile{}
-		if err := mudyang.Unmarshal(json, mud); err != nil {
-			return errors.Wrap(err, "can't unmarshal JSON")
-		}
-
-		// TODO: print a summary instead of the full JSON?
-
-		jsonString, err := ygot.EmitJSON(mud, &ygot.EmitJSONConfig{
-			Format: ygot.RFC7951,
-			Indent: "  ",
-			RFC7951Config: &ygot.RFC7951JSONConfig{
-				AppendModuleName: true,
-			},
-			SkipValidation: false, // TODO: provide flag to skip?
-		})
+		json, err := internal.JSON(mudfile)
 		if err != nil {
-			return errors.Wrap(err, "could not marshal MUD file into JSON")
+			return errors.Wrap(err, "getting JSON representation of MUD file failed")
 		}
 
-		fmt.Println(jsonString)
+		// TODO: provide ways to show different info? Like a summary?
+		fmt.Println(json)
 
 		return nil
 	},

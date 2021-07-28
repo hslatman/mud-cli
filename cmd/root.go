@@ -16,7 +16,6 @@ limitations under the License.
 package cmd
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 
@@ -30,16 +29,7 @@ var mudRootDir string
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
 	Use:   "mud",
-	Short: "A brief description of your application",
-	Long: `A longer description that spans multiple lines and likely contains
-examples and usage of using your application. For example:
-
-Cobra is a CLI library for Go that empowers applications.
-This application is a tool to generate the needed files
-to quickly create a Cobra application.`,
-	// Uncomment the following line if your bare application
-	// has an action associated with it:
-	// Run: func(cmd *cobra.Command, args []string) { },
+	Short: "mud provides several utilities for working with MUD files",
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
@@ -70,7 +60,7 @@ func initConfig() {
 	cobra.CheckErr(err)
 
 	mudRootDir = filepath.Join(home, mudDir)
-	fmt.Println(mudRootDir)
+	//fmt.Println(mudRootDir)
 	if !dirExists(mudRootDir) {
 		err = os.MkdirAll(mudRootDir, 0700) // TODO: right permissions?
 		cobra.CheckErr(err)

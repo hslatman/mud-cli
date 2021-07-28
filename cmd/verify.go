@@ -25,56 +25,56 @@ import (
 	cms "github.com/github/ietf-cms"
 	"github.com/hslatman/mud-cli/internal"
 	"github.com/hslatman/mud.yang.go/pkg/mudyang"
-	"github.com/openconfig/ygot/ygot"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"go.step.sm/crypto/pemutil"
 )
 
+var signatureFlag string
+
 // verifyCmd represents the verify command
 var verifyCmd = &cobra.Command{
 	Use:   "verify",
-	Short: "A brief description of your command",
-	Long: `A longer description that spans multiple lines and likely contains examples
-and usage of using your command. For example:
-
-Cobra is a CLI library for Go that empowers applications.
-This application is a tool to generate the needed files
-to quickly create a Cobra application.`,
+	Short: "Verifies the signature for a MUD file",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		filepath := args[0]
-		json, err := internal.Contents(filepath)
+		data, err := internal.Read(filepath)
 		if err != nil {
-			return errors.Wrap(err, "error reading file contents")
+			errors.Wrapf(err, "error reading contents of %s", filepath)
+		}
+		mudfile, err := internal.Parse(data)
+		if err != nil {
+			return errors.Wrap(err, "could not get contents")
+		}
+		signature, err := getSignatureFilepath(mudfile)
+		if err != nil {
+			return errors.Wrap(err, "retrieving signature from MUD failed")
 		}
 
-		mud := &mudyang.Mudfile{}
-		if err := mudyang.Unmarshal(json, mud); err != nil {
-			return errors.Wrap(err, "can't unmarshal JSON")
-		}
+		fmt.Println("signature path: ", signature)
 
-		signaturePath, err := internal.SignaturePath(filepath)
-		fmt.Println("signature path: ", signaturePath)
-		if err != nil {
-			return errors.Wrap(err, "retrieving signature path from MUD failed")
-		}
+		// signaturePath, err := internal.SignaturePath(filepath)
+		// fmt.Println("signature path: ", signaturePath)
+		// if err != nil {
+		// 	return errors.Wrap(err, "retrieving signature path from MUD failed")
+		// }
 
 		// TODO: read MUD signature file location from MUD file, retrieve it and verify using that one
 		// TODO: allow for providing the signature file as an argument
 
-		jsonString, err := ygot.EmitJSON(mud, &ygot.EmitJSONConfig{
-			Format: ygot.RFC7951,
-			Indent: "  ",
-			RFC7951Config: &ygot.RFC7951JSONConfig{
-				AppendModuleName: true,
-			},
-			SkipValidation: false,
-		})
-		if err != nil {
-			return errors.Wrap(err, "could not marshal MUD file into JSON")
-		}
+		// jsonString, err := ygot.EmitJSON(mudfile, &ygot.EmitJSONConfig{
+		// 	Format: ygot.RFC7951,
+		// 	Indent: "  ",
+		// 	RFC7951Config: &ygot.RFC7951JSONConfig{
+		// 		AppendModuleName: true,
+		// 	},
+		// 	SkipValidation: false,
+		// })
+		// if err != nil {
+		// 	return errors.Wrap(err, "could not marshal MUD file into JSON")
+		// }
 
-		data := []byte(jsonString)
+		// data := []byte(jsonString)
 
 		fmt.Println(data)
 
@@ -115,16 +115,22 @@ to quickly create a Cobra application.`,
 	},
 }
 
+func getSignatureFilepath(mudfile *mudyang.Mudfile) (string, error) {
+	if signatureFlag != "" {
+		return signatureFlag, nil
+	}
+	if mudfile.Mud == nil {
+		return "", errors.New("no 'mud' property found in MUD file")
+	}
+	sig := mudfile.Mud.MudSignature
+	if sig == nil {
+		return "", errors.New("no signature found in MUD file")
+	}
+	return *sig, nil
+}
+
 func init() {
 	rootCmd.AddCommand(verifyCmd)
 
-	// Here you will define your flags and configuration settings.
-
-	// Cobra supports Persistent Flags which will work for this command
-	// and all subcommands, e.g.:
-	// verifyCmd.PersistentFlags().String("foo", "", "A help for foo")
-
-	// Cobra supports local flags which will only run when this command
-	// is called directly, e.g.:
-	// verifyCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+	verifyCmd.PersistentFlags().StringVarP(&signatureFlag, "signature", "s", "", "Location of signature file to use")
 }

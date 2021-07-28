@@ -26,7 +26,9 @@ import (
 	"io/ioutil"
 	"log"
 	"math/big"
+	"net/url"
 	fp "path/filepath"
+	"strings"
 	"time"
 
 	cms "github.com/github/ietf-cms"
@@ -39,82 +41,122 @@ import (
 	"go.step.sm/crypto/pemutil"
 )
 
+var baseURLFlag string
+var ignoreExistingSignatureFlag bool
+
 // signCmd represents the sign command
 var signCmd = &cobra.Command{
 	Use:   "sign",
-	Short: "A brief description of your command",
-	Long: `A longer description that spans multiple lines and likely contains examples
-and usage of using your command. For example:
-
-Cobra is a CLI library for Go that empowers applications.
-This application is a tool to generate the needed files
-to quickly create a Cobra application.`,
-	Args: cobra.MinimumNArgs(1),
+	Short: "Signs a MUD file",
+	Args:  cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-
 		filepath := args[0]
-		json, err := internal.Contents(filepath)
+		data, err := internal.Read(filepath)
 		if err != nil {
-			return errors.Wrapf(err, "retrieving contents from %s failed", filepath)
+			return errors.Wrapf(err, "error reading contents of %s", filepath)
+		}
+		mudfile, err := internal.Parse(data)
+		if err != nil {
+			return errors.Wrap(err, "could not get contents")
 		}
 
-		mudfile := &mudyang.Mudfile{}
-		if err := mudyang.Unmarshal(json, mudfile); err != nil {
-			return errors.Wrapf(err, "unmarshaling JSON failed")
-		}
+		// TODO: provide option to first emit standard MUD JSON and use the JSON
+		// representation of that as the material to be signed?
 
-		// TODO: provide flag to override an existing signature
-		// if mudHasSignature(mud) {
-		// 	fmt.Printf("this MUD already has a signature available at: %s\n", *mud.Mud.MudSignature)
-		// 	return
+		// TODO: look into this logic: if a signature path is know, the signature may already
+		// exist or not yet. If it does already exist, we may want to re-sign the MUD file.
+		// The location of the new signature can be assumed to be the same in the end.
+		// if !ignoreExistingSignatureFlag && mudHasSignature(mudfile) {
+		// 	return fmt.Errorf("this MUD already has a signature available at: %s", *mudfile.Mud.MudSignature)
 		// }
 
-		signaturePath, err := internal.SignaturePath(filepath)
-		fmt.Println("signature path: ", signaturePath)
+		existingMudUrl, err := internal.MUDURL(mudfile)
+		fmt.Println("existing mud url: ", existingMudUrl)
+		if err != nil {
+			return errors.Wrap(err, "retrieving MUD URL from MUD failed")
+		}
+
+		existingMudSignatureUrl, err := internal.MUDSignatureURL(mudfile)
+		fmt.Println("existing mud signature: ", existingMudSignatureUrl)
+		if err != nil {
+			return errors.Wrap(err, "retrieving MUD signature URL from MUD failed")
+		}
+
+		signatureFilename, err := internal.SignatureFilename(filepath)
+		fmt.Println("signature path: ", signatureFilename)
 		if err != nil {
 			return errors.Wrap(err, "retrieving signature path from MUD failed")
 		}
+
+		newMudURL := existingMudUrl
+		fmt.Println("new MUD url: ", newMudURL)
+		newSignatureURL := internal.NewMUDSignatureURL(existingMudUrl, signatureFilename)
+		fmt.Println("new signature url: ", newSignatureURL)
+
+		if baseURLFlag != "" {
+			newMudURL, err = rewriteBase(newMudURL, baseURLFlag)
+			if err != nil {
+				return errors.Wrap(err, "rewriting base URL for MUD URL failed")
+			}
+			newSignatureURL, err = rewriteBase(newSignatureURL, baseURLFlag)
+			if err != nil {
+				return errors.Wrap(err, "rewriting base URL for MUD signature URL failed")
+			}
+		}
+
+		fmt.Println("new MUD url: ", newMudURL)
+		fmt.Println("new signature url: ", newSignatureURL)
+
+		//var signatureURL *url.URL
+		// if baseURLFlag != "" {
+		// 	baseURL, err := url.Parse(baseURLFlag)
+		// 	if err != nil {
+		// 		return errors.Wrap(err, "failed parsing base URL")
+		// 	}
+		// 	signatureURL = baseURL
+		// 	signatureURL.Path = signaturePath // TODO: support path with multiple segments
+		// } else {
+		// 	signatureURL = mudURL
+		// 	signatureURL.Path = signaturePath // TODO: support path with multiple segments
+		// }
 
 		// TODO: update Mudfile with location for signature? Needs to be clear that it has indeed be changed.
 		// TODO: if signing a local file, provide argument for the full path or directory for the signature file, so
 		// that the right value can be added to the MUD file before signing.
 
-		output, err := ygot.DeepCopy(mudfile)
+		copy, err := ygot.DeepCopy(mudfile)
 		if err != nil {
 			return errors.Wrap(err, "creating deep copy of MUD YANG representation failed")
 		}
 
-		outputMudfile, ok := output.(*mudyang.Mudfile)
+		copyMUDFile, ok := copy.(*mudyang.Mudfile)
 		if !ok {
 			return errors.New("the output MUD YANG is not a *mudyang.Mudfile")
 		}
 
-		// TODO: if changing the signature, should we update the updated_at too? And/or others?
-		outputMudfile.Mud.MudSignature = &signaturePath
+		// TODO: change other properties?
+		mudURLString := newMudURL.String()
+		copyMUDFile.Mud.MudUrl = &mudURLString
+		signatureURLString := newSignatureURL.String()
+		copyMUDFile.Mud.MudSignature = &signatureURLString
 
-		n, err := ygot.Diff(mudfile, outputMudfile)
+		diff, err := ygot.Diff(mudfile, copyMUDFile)
 		if err != nil {
 			return errors.Wrap(err, "diffing the input and output MUD file failed")
 		}
 
-		// TODO: after diffing, check only expected number of changes were made
-		log.Println("diff: ", n)
+		// TODO: can the diff be printed nicely (easily)? It seems to be some text values ...
+		log.Println("diff: ", diff)
 
-		//jsonString, err := ygot.EmitJSON(outputMudfile, &ygot.EmitJSONConfig{
-		jsonString, err := ygot.EmitJSON(mudfile, &ygot.EmitJSONConfig{
-			Format: ygot.RFC7951,
-			Indent: "  ",
-			RFC7951Config: &ygot.RFC7951JSONConfig{
-				AppendModuleName: true,
-			},
-			SkipValidation: false,
-			// TODO: other validation options?
-		})
-		if err != nil {
-			return errors.Wrap(err, "could not marshal MUD file into JSON")
+		differencesFound := len(diff.GetDelete())+len(diff.GetUpdate()) > 0
+		if differencesFound {
+			// TODO: in case we're using the copy, we probably also need to update the updated_at
+			json, err := internal.JSON(copyMUDFile)
+			if err != nil {
+				return errors.Wrap(err, "getting JSON representation of MUD file failed")
+			}
+			data = []byte(json)
 		}
-
-		data := []byte(jsonString)
 
 		fmt.Println(data)
 
@@ -180,6 +222,9 @@ to quickly create a Cobra application.`,
 			return errors.Wrap(err, "writing DER signature failed")
 		}
 
+		// TODO: if differences were found, we also should store the new
+		// MUD file, so that it can be uploaded later.
+
 		fmt.Println(signature)
 
 		// TODO: print output on how/where to store the file + signature?
@@ -237,16 +282,33 @@ func mudHasSignature(mud *mudyang.Mudfile) bool {
 	return mud.Mud.MudSignature != nil
 }
 
+func rewriteBase(u *url.URL, baseURLString string) (*url.URL, error) {
+	// TODO: check this works as expected
+	base, err := url.Parse(baseURLString)
+	if err != nil {
+		return nil, err
+	}
+	path := u.EscapedPath()
+	filename := fp.Base(path)
+	baseString := base.String()
+	if !strings.HasSuffix(baseString, "/") {
+		baseString = baseString + "/"
+	}
+	newURL, err := url.Parse(baseString + filename)
+	if err != nil {
+		return nil, err
+	}
+	newURL.RawQuery = u.RawQuery
+	newURL.Fragment = u.Fragment
+	return newURL, nil
+}
+
 func init() {
 	rootCmd.AddCommand(signCmd)
 
-	// Here you will define your flags and configuration settings.
+	// TODO: provide a flag that uses a base URL for the MUD URL and signature to exist in the file?
 
-	// Cobra supports Persistent Flags which will work for this command
-	// and all subcommands, e.g.:
-	// signCmd.PersistentFlags().String("foo", "", "A help for foo")
-
-	// Cobra supports local flags which will only run when this command
-	// is called directly, e.g.:
-	// signCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+	signCmd.PersistentFlags().StringVarP(&baseURLFlag, "base-url", "u", "", "Base URL to use for MUD URL and signature location")
+	signCmd.PersistentFlags().StringVarP(&signatureFlag, "signature", "s", "", "Location of signature file to set")
+	signCmd.PersistentFlags().BoolVar(&ignoreExistingSignatureFlag, "ignore-existing-signature", false, "Ignore")
 }
