@@ -86,14 +86,6 @@ func initConfig() {
 	// }
 }
 
-func fileExists(file string) bool {
-	_, err := os.Stat(file)
-	if err != nil {
-		return !os.IsNotExist(err)
-	}
-	return true
-}
-
 func dirExists(dir string) bool {
 	s, err := os.Stat(dir)
 	if err != nil {

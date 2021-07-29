@@ -7,7 +7,7 @@ import (
 	"github.com/hslatman/mud.yang.go/pkg/mudyang"
 )
 
-func SignatureFilename(filepath string) (string, error) {
+func MUDFilename(filepath string) (string, error) {
 	var filename string
 	if isURL(filepath) {
 		u, err := url.Parse(filepath)
@@ -15,18 +15,19 @@ func SignatureFilename(filepath string) (string, error) {
 			return "", err
 		}
 		filename = fp.Base(u.EscapedPath())
-		return filename + ".p7s", nil
-		//u.Path = filename + ".p7s"
-		//return u.String(), nil
+	} else {
+		filename = fp.Base(filepath)
 	}
 
-	// TODO: we probably need to change this for local files.
-	// We actually need to know the location the signature will
-	// be put online, so that that can be used as the signature
-	// path in the MUD file and then can be signed.
-	filename = fp.Base(filepath) + ".p7s"
-	//return fp.Join(fp.Dir(filepath), filename), nil
 	return filename, nil
+}
+
+func SignatureFilename(filepath string) (string, error) {
+	mudFilename, err := MUDFilename(filepath)
+	if err != nil {
+		return "", err
+	}
+	return mudFilename + ".p7s", nil
 }
 
 func MUDURL(mudfile *mudyang.Mudfile) (*url.URL, error) {
