@@ -17,6 +17,7 @@ func Read(filepath string) ([]byte, error) {
 		// TODO: provide additional parameters for filetype to retrieve (or use a MUD client abstraction?)
 		// so that the right headers can be provided in the requests (and check these in the response?)
 		// TODO: RFC states that MUD URL should be HTTPS; fail on that here if not?
+		// TODO: get rid of the temp file? I think it's relatively safe to keep the content bytes in memory
 		f, err := ioutil.TempFile(os.TempDir(), "")
 		if err != nil {
 			return []byte{}, err
