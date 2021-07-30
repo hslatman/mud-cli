@@ -16,7 +16,6 @@ limitations under the License.
 package cmd
 
 import (
-	"crypto/x509"
 	"io/ioutil"
 	"log"
 	"net/url"
@@ -36,6 +35,8 @@ import (
 var baseURLFlag string
 var ignoreExistingSignatureFlag bool
 var normalizeFlag bool
+var keyFilepathFlag string
+var chainFilepathFlag string
 
 // signCmd represents the sign command
 var signCmd = &cobra.Command{
@@ -135,18 +136,15 @@ var signCmd = &cobra.Command{
 			data = []byte(json)
 		}
 
-		// TODO: allow to provide a cert and key (and/or fallback to some stored in .mud dir?)
-		keyFilepath := fp.Join(mudRootDir, "key.pem")
-		certFilepath := fp.Join(mudRootDir, "cert.pem")
-		cert, signer, err := internal.LoadOrCreateKey(keyFilepath, certFilepath)
+		chain, signer, err := internal.LoadOrCreateKeyAndChain(chainFilepathFlag, keyFilepathFlag)
 		if err != nil {
 			return errors.Wrap(err, "loading/creating private key failed")
 		}
 
-		// TODO: add intermediates? Or how to integrate with a (private, trusted) CA? RFC says that they MUST be added.
-		certs := []*x509.Certificate{cert}
+		// TODO: prevent signing with certificate that is no longer valid (or almost going to expire?)
 
-		signature, err := cms.SignDetached(data, certs, signer)
+		// TODO: allow signing with some other signer, not based on key and cert file, too?
+		signature, err := cms.SignDetached(data, chain, signer)
 		if err != nil {
 			return errors.Wrap(err, "signing data failed")
 		}
@@ -207,8 +205,13 @@ func rewriteBase(u *url.URL, baseURLString string) (*url.URL, error) {
 func init() {
 	rootCmd.AddCommand(signCmd)
 
+	defaultKeyFilepath := fp.Join(mudRootDir, "key.pem")
+	defaultChainFilepath := fp.Join(mudRootDir, "chain.pem")
+
 	signCmd.PersistentFlags().StringVarP(&baseURLFlag, "base-url", "u", "", "Base URL to use for MUD URL and signature location")
 	signCmd.PersistentFlags().StringVarP(&signatureFlag, "signature", "s", "", "Location of signature file to set")
 	signCmd.PersistentFlags().BoolVar(&ignoreExistingSignatureFlag, "ignore-existing-signature", false, "Ignore case in which MUD already has a signature")
-	signCmd.PersistentFlags().BoolVarP(&normalizeFlag, "normalize", "n", false, "Normalize the MUD JSON according to default mud.yang.go order")
+	signCmd.PersistentFlags().BoolVar(&normalizeFlag, "normalize", false, "Normalize the MUD JSON according to default mud.yang.go order")
+	signCmd.PersistentFlags().StringVarP(&keyFilepathFlag, "key", "k", defaultKeyFilepath, "Path to private key file (PEM)")
+	signCmd.PersistentFlags().StringVarP(&chainFilepathFlag, "chain", "c", defaultChainFilepath, "Path to certificate chain or self-signed certificate (PEM)")
 }

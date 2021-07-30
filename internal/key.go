@@ -17,8 +17,8 @@ import (
 	"go.step.sm/crypto/pemutil"
 )
 
-func LoadOrCreateKey(keyFilepath, certFilepath string) (*x509.Certificate, crypto.Signer, error) {
-	// TODO: allow signing with some other signer, not based on key and cert file, too?
+func LoadOrCreateKeyAndChain(chainFilepath, keyFilepath string) ([]*x509.Certificate, crypto.Signer, error) {
+	var chain []*x509.Certificate
 	var cert *x509.Certificate
 	var key crypto.PrivateKey
 	var err error
@@ -28,10 +28,11 @@ func LoadOrCreateKey(keyFilepath, certFilepath string) (*x509.Certificate, crypt
 		if err != nil {
 			return nil, nil, errors.Wrap(err, "parsing certificate failed")
 		}
-		_, err = pemutil.Serialize(cert, pemutil.ToFile(certFilepath, 0600))
+		_, err = pemutil.Serialize(cert, pemutil.ToFile(chainFilepath, 0600))
 		if err != nil {
-			return nil, nil, errors.Wrapf(err, "serializing certificate to %s failed", certFilepath)
+			return nil, nil, errors.Wrapf(err, "serializing certificate to %s failed", chainFilepath)
 		}
+		chain = []*x509.Certificate{cert}
 		key, err = x509.ParsePKCS8PrivateKey(keyBytes)
 		if err != nil {
 			return nil, nil, errors.Wrap(err, "parsing private key failed")
@@ -41,21 +42,20 @@ func LoadOrCreateKey(keyFilepath, certFilepath string) (*x509.Certificate, crypt
 			return nil, nil, errors.Wrapf(err, "serializing private key to %s failed", keyFilepath)
 		}
 	} else {
-		cert, err = pemutil.ReadCertificate(certFilepath)
+		chain, err = pemutil.ReadCertificateBundle(chainFilepath)
 		if err != nil {
-			return nil, nil, errors.Wrapf(err, "reading certificate from %s failed", certFilepath)
+			return nil, nil, errors.Wrap(err, "parsing certificate(s) failed")
 		}
-		k, err := pemutil.Read(keyFilepath, pemutil.WithPassword([]byte("1234")))
+		key, err = pemutil.Read(keyFilepath, pemutil.WithPassword([]byte("1234")))
 		if err != nil {
 			return nil, nil, errors.Wrapf(err, "reading private key from %s failed", keyFilepath)
 		}
-		key = k
 	}
 	signer, ok := key.(crypto.Signer)
 	if !ok {
 		return nil, nil, errors.New("key is not a signer")
 	}
-	return cert, signer, nil
+	return chain, signer, nil
 }
 
 func fileExists(file string) bool {

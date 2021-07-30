@@ -39,6 +39,7 @@ func Execute() {
 }
 
 func init() {
+	initDir()
 	cobra.OnInitialize(initConfig)
 
 	// Here you will define your flags and configuration settings.
@@ -52,21 +53,23 @@ func init() {
 	//rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 }
 
-// initConfig reads in config file and ENV variables if set.
-func initConfig() {
+func initDir() {
 
 	// Find home directory.
 	home, err := os.UserHomeDir()
 	cobra.CheckErr(err)
 
+	// TODO: prepare full directory structure?
+
 	mudRootDir = filepath.Join(home, mudDir)
-	//fmt.Println(mudRootDir)
 	if !dirExists(mudRootDir) {
 		err = os.MkdirAll(mudRootDir, 0700) // TODO: right permissions?
 		cobra.CheckErr(err)
 	}
+}
 
-	// TODO: prepare directory structure?
+// initConfig reads in config file and ENV variables if set.
+func initConfig() {
 
 	// if cfgFile != "" {
 	// 	// Use config file from the flag.

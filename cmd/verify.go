@@ -18,7 +18,7 @@ package cmd
 import (
 	"crypto/x509"
 	"log"
-	fp "path/filepath"
+	"time"
 
 	cms "github.com/github/ietf-cms"
 	"github.com/hslatman/mud-cli/internal"
@@ -29,6 +29,7 @@ import (
 )
 
 var signatureFlag string
+var caBundleFilepathFlag string
 
 // verifyCmd represents the verify command
 var verifyCmd = &cobra.Command{
@@ -49,11 +50,12 @@ var verifyCmd = &cobra.Command{
 			return errors.Wrap(err, "retrieving signature from MUD failed")
 		}
 
-		var cert *x509.Certificate
-		certFile := fp.Join(mudRootDir, "cert.pem")
-		cert, err = pemutil.ReadCertificate(certFile)
-		if err != nil {
-			return errors.Wrapf(err, "reading certificate from %s failed", certFile)
+		var caBundle []*x509.Certificate
+		if caBundleFilepathFlag != "" {
+			caBundle, err = pemutil.ReadCertificateBundle(caBundleFilepathFlag)
+			if err != nil {
+				return errors.Wrapf(err, "reading certificate from %s failed", caBundleFilepathFlag)
+			}
 		}
 
 		der, err := internal.Read(signaturePath)
@@ -66,10 +68,18 @@ var verifyCmd = &cobra.Command{
 			return errors.Wrap(err, "parsing signed data failed")
 		}
 
-		pool := x509.NewCertPool()
-		pool.AddCert(cert)
+		var roots *x509.CertPool
+		if len(caBundle) > 0 {
+			roots = x509.NewCertPool()
+			for _, cert := range caBundle {
+				roots.AddCert(cert)
+			}
+		}
+
+		// TODO: more verify options? and stricter?
 		options := x509.VerifyOptions{
-			Roots: pool, // TODO: make this optional with the CA to trust; now it's like a self-signed cert
+			CurrentTime: time.Date(2021, 7, 16, 10, 1, 1, 0, time.Local), // TODO: remote this; or make it some kind of option to not check the time on the cert?
+			Roots:       roots,
 		}
 		if _, err := sd.VerifyDetached(data, options); err != nil {
 			return errors.Wrap(err, "verifying data failed")
@@ -99,4 +109,5 @@ func init() {
 	rootCmd.AddCommand(verifyCmd)
 
 	verifyCmd.PersistentFlags().StringVarP(&signatureFlag, "signature", "s", "", "Location of signature file to use")
+	verifyCmd.PersistentFlags().StringVarP(&caBundleFilepathFlag, "ca-bundle", "c", "", "Path to CA (root) certificates to trust (PEM)")
 }
