@@ -16,14 +16,19 @@ limitations under the License.
 package cmd
 
 import (
+	"context"
 	"log"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/hslatman/mud-cli/internal"
 	"github.com/hslatman/mud-cli/web"
+	"github.com/pkg/browser"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
+
+	"github.com/antage/eventsource"
 )
 
 // viewCmd represents the view command
@@ -44,10 +49,14 @@ var viewCmd = &cobra.Command{
 			return errors.Wrap(err, "getting JSON representation of MUD file failed")
 		}
 
-		// TODO: open browser; show MUD Visualizer with the chosen MUD file
-		// TODO: provide option to show it in terminal?
+		// TODO: provide option to show it in terminal with some ASCII art?
+		// TODO: provide option to show it in a Wails UI (instead of default browser)?
+
+		closeChan := make(chan struct{}, 1)
+		stopChan := make(chan error, 1)
 
 		mudHandler := newMUDHandler(json)
+		streamHandler := newStreamHandler(closeChan)
 
 		// Strip / and prepend build, so that a file `a/b.js` would be
 		// found in web/build/a/b.js, but served from localhost:8080/a/b.js.
@@ -55,20 +64,40 @@ var viewCmd = &cobra.Command{
 
 		mux := http.NewServeMux()
 		mux.Handle("/mud", mudHandler)
+		mux.Handle("/heartbeat", streamHandler)
 		mux.Handle("/", webHandler)
 		mux.Handle("/*filepath", webHandler)
 
 		s := &http.Server{
-			Addr:           ":8080",
+			Addr:           "localhost:8080",
 			Handler:        mux,
 			ReadTimeout:    10 * time.Second,
 			WriteTimeout:   10 * time.Second,
 			MaxHeaderBytes: 1 << 20,
 		}
 
-		log.Fatal(s.ListenAndServe()) // TODO: add some logging?
+		s.RegisterOnShutdown(streamHandler.Close)
 
-		return nil
+		go func() {
+			<-closeChan
+			log.Println("closing server ...")
+			ctx := context.Background()
+			ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+			defer cancel()
+			stopChan <- s.Shutdown(ctx)
+		}()
+
+		// TODO: add some more logging?
+
+		log.Println("serving at ...")
+		go s.ListenAndServe()
+
+		log.Println("go to ...")
+		go browser.OpenURL("http://localhost:8080/")
+
+		err = <-stopChan
+
+		return err
 	},
 }
 
@@ -84,6 +113,65 @@ func newMUDHandler(json string) http.Handler {
 	return &mudHandler{
 		json: json,
 	}
+}
+
+type streamHandler struct {
+	es eventsource.EventSource
+	c  chan struct{}
+}
+
+func newStreamHandler(c chan struct{}) *streamHandler {
+	es := eventsource.New(
+		&eventsource.Settings{
+			Timeout:        2 * time.Second,
+			CloseOnTimeout: true,
+			IdleTimeout:    2 * time.Second,
+			Gzip:           true,
+		},
+		func(req *http.Request) [][]byte {
+			return [][]byte{
+				[]byte("X-Accel-Buffering: no"),
+				[]byte("Access-Control-Allow-Origin: *"),
+			}
+		},
+	)
+	return &streamHandler{
+		es: es,
+		c:  c,
+	}
+}
+
+func (s *streamHandler) Close() {
+	s.es.Close()
+}
+
+func (s *streamHandler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
+
+	numberOfConsumers := s.es.ConsumersCount()
+
+	// serve sse to the (new) connection
+	s.es.ServeHTTP(resp, req)
+
+	// the routine for pings should only be started once
+	if numberOfConsumers > 0 {
+		return
+	}
+
+	// send a ping to all consumers every second
+	go func() {
+		var id int
+		for {
+			id++
+			time.Sleep(1 * time.Second)
+			s.es.SendEventMessage("ping", "message", strconv.Itoa(id))
+			// break out of the loop when 0 consumers are reached again
+			if s.es.ConsumersCount() == 0 {
+				break
+			}
+		}
+		s.c <- struct{}{}
+	}()
+
 }
 
 func init() {

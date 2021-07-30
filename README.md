@@ -13,6 +13,8 @@ The access control policies described in a MUD File allow network controllers to
 * Improve README.md
 * Add 'Use' to commands
 * Add tests
+* Customize / improve the MUD Visualizer?
+* Add logging (with levels)
 * Replace calls to fmt with proper logging / output
 * Allow the tool to be chained (i.e. use STDIN/STDOUT, pipes, etc.)
 * A command for generating MUD files (from pcap or some different way)
