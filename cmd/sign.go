@@ -155,7 +155,7 @@ var signCmd = &cobra.Command{
 			os.MkdirAll(outputDir, 0700)
 		}
 
-		// TODO: also provide an option to encode it to PEM instead? Have only seend DER examples, though.
+		// TODO: also provide an option to encode it to PEM instead? Have only seen DER examples, though.
 		newSignatureFilepath := fp.Join(outputDir, signatureFilename)
 		err = ioutil.WriteFile(newSignatureFilepath, signature, 0644)
 		if err != nil {
@@ -176,10 +176,6 @@ var signCmd = &cobra.Command{
 		return nil
 	},
 }
-
-// func mudHasSignature(mud *mudyang.Mudfile) bool {
-// 	return mud.Mud.MudSignature != nil
-// }
 
 func rewriteBase(u *url.URL, baseURLString string) (*url.URL, error) {
 	// TODO: check/test this works as expected in all/most cases

@@ -2,17 +2,16 @@ package internal
 
 import (
 	"crypto"
-	"crypto/ecdsa"
 	"crypto/rand"
-	"crypto/rsa"
 	"crypto/x509"
 	"crypto/x509/pkix"
-	"log"
+	"fmt"
 	"math/big"
 	"os"
 	"time"
 
 	"github.com/pkg/errors"
+	"github.com/smallstep/cli/ui"
 	"go.step.sm/crypto/keyutil"
 	"go.step.sm/crypto/pemutil"
 )
@@ -23,7 +22,21 @@ func LoadOrCreateKeyAndChain(chainFilepath, keyFilepath string) ([]*x509.Certifi
 	var key crypto.PrivateKey
 	var err error
 	if !fileExists(keyFilepath) {
-		certBytes, keyBytes := generateKey() // TODO: this logic should probably go somewhere different; a key + CSR should be created and sent to CA for a signed cert.
+		// TODO: split logic for the key and chain/cert? Or make clear that this is for testing/demo purposes?
+		shouldContinue, err := ui.PromptYesNo(
+			fmt.Sprintf("key at %s does not exist; create a new one?", keyFilepath),
+			ui.WithRichPrompt(),
+		)
+		if err != nil {
+			return nil, nil, errors.Wrap(err, "error prompting user")
+		}
+		if !shouldContinue {
+			return nil, nil, errors.New("no private key available nor created")
+		}
+		certBytes, keyBytes, err := generateKey()
+		if err != nil {
+			return nil, nil, errors.Wrap(err, "error generating new private key")
+		}
 		cert, err = x509.ParseCertificate(certBytes)
 		if err != nil {
 			return nil, nil, errors.Wrap(err, "parsing certificate failed")
@@ -37,7 +50,17 @@ func LoadOrCreateKeyAndChain(chainFilepath, keyFilepath string) ([]*x509.Certifi
 		if err != nil {
 			return nil, nil, errors.Wrap(err, "parsing private key failed")
 		}
-		_, err = pemutil.Serialize(key, pemutil.ToFile(keyFilepath, 0600), pemutil.WithPassword([]byte("1234"))) // TODO: provide password or prompt for it
+		options := []pemutil.Options{}
+		options = append(options, pemutil.ToFile(keyFilepath, 0600))
+		password, err := ui.PromptPasswordGenerate(
+			"Please enter a password for the private key [a random password will be generated if you leave this empty]",
+			ui.WithRichPrompt(),
+		)
+		if err != nil {
+			return nil, nil, errors.Wrap(err, "error prompting user for password")
+		}
+		options = append(options, pemutil.WithPassword(password))
+		_, err = pemutil.Serialize(key, options...)
 		if err != nil {
 			return nil, nil, errors.Wrapf(err, "serializing private key to %s failed", keyFilepath)
 		}
@@ -46,7 +69,14 @@ func LoadOrCreateKeyAndChain(chainFilepath, keyFilepath string) ([]*x509.Certifi
 		if err != nil {
 			return nil, nil, errors.Wrap(err, "parsing certificate(s) failed")
 		}
-		key, err = pemutil.Read(keyFilepath, pemutil.WithPassword([]byte("1234")))
+		options := []pemutil.Options{}
+		options = append(options, pemutil.WithPasswordPrompt(
+			fmt.Sprintf("Please enter the password to decrypt %s", keyFilepath),
+			func(s string) ([]byte, error) {
+				return ui.PromptPassword(s)
+			}),
+		)
+		key, err = pemutil.Read(keyFilepath, options...)
 		if err != nil {
 			return nil, nil, errors.Wrapf(err, "reading private key from %s failed", keyFilepath)
 		}
@@ -66,28 +96,23 @@ func fileExists(file string) bool {
 	return true
 }
 
-func publicKey(priv interface{}) interface{} {
-	switch k := priv.(type) {
-	case *rsa.PrivateKey:
-		return &k.PublicKey
-	case *ecdsa.PrivateKey:
-		return &k.PublicKey
-	default:
-		return nil
-	}
-}
-
-func generateKey() (certBytes, keyBytes []byte) {
-	priv, err := keyutil.GenerateKey("EC", "P-256", 0)
-	//priv, err := keyutil.GenerateKey("RSA", "", 2048)
+func generateKey() (certBytes, keyBytes []byte, err error) {
+	private, err := keyutil.GenerateKey("EC", "P-256", 0)
 	if err != nil {
-		log.Fatal(err)
+		return certBytes, keyBytes, err
 	}
-
+	public, err := keyutil.PublicKey(private)
+	if err != nil {
+		return certBytes, keyBytes, err
+	}
+	i, err := rand.Int(rand.Reader, big.NewInt(100000000000000000))
+	if err != nil {
+		return certBytes, keyBytes, err
+	}
 	template := x509.Certificate{
-		SerialNumber: big.NewInt(1),
+		SerialNumber: i,
 		Subject: pkix.Name{
-			Organization: []string{"mudsign example organization"},
+			Organization: []string{"mud-cli example signing organization"},
 		},
 		NotBefore:             time.Now(),
 		NotAfter:              time.Now().Add(time.Hour * 24 * 180),
@@ -96,16 +121,13 @@ func generateKey() (certBytes, keyBytes []byte) {
 		IsCA:                  true,
 		BasicConstraintsValid: true,
 	}
-
-	derBytes, err := x509.CreateCertificate(rand.Reader, &template, &template, publicKey(priv), priv)
+	certBytes, err = x509.CreateCertificate(rand.Reader, &template, &template, public, private)
 	if err != nil {
-		log.Fatalf("failed to create certificate: %s", err)
+		return certBytes, keyBytes, err
 	}
-
-	keyBytes, err = x509.MarshalPKCS8PrivateKey(priv)
+	keyBytes, err = x509.MarshalPKCS8PrivateKey(private)
 	if err != nil {
-		log.Fatalf("failed to marshal private key: %s", err)
+		return certBytes, keyBytes, err
 	}
-
-	return derBytes, keyBytes
+	return certBytes, keyBytes, nil
 }

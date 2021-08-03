@@ -18,7 +18,6 @@ package cmd
 import (
 	"crypto/x509"
 	"log"
-	"time"
 
 	cms "github.com/github/ietf-cms"
 	"github.com/hslatman/mud-cli/internal"
@@ -78,8 +77,8 @@ var verifyCmd = &cobra.Command{
 
 		// TODO: more verify options? and stricter?
 		options := x509.VerifyOptions{
-			CurrentTime: time.Date(2021, 7, 16, 10, 1, 1, 0, time.Local), // TODO: remote this; or make it some kind of option to not check the time on the cert?
-			Roots:       roots,
+			//CurrentTime: time.Date(2021, 7, 16, 10, 1, 1, 0, time.Local), // TODO: remove this fully; or make it some kind of option to skip the time check on the cert(s)?
+			Roots: roots,
 		}
 		if _, err := sd.VerifyDetached(data, options); err != nil {
 			return errors.Wrap(err, "verifying data failed")

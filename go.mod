@@ -9,6 +9,7 @@ require (
 	github.com/openconfig/ygot v0.11.2
 	github.com/pkg/browser v0.0.0-20210706143420-7d21f8c997e2
 	github.com/pkg/errors v0.9.1
+	github.com/smallstep/cli v0.16.1
 	github.com/spf13/cobra v1.2.1
 	go.step.sm/crypto v0.9.0
 )
