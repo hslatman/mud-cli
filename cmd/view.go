@@ -1,5 +1,5 @@
 /*
-Copyright © 2021 NAME HERE <EMAIL ADDRESS>
+Copyright © 2021 Herman Slatman <hslatman>
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -17,6 +17,7 @@ package cmd
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net/http"
 	"strconv"
@@ -56,7 +57,7 @@ var viewCmd = &cobra.Command{
 		stopChan := make(chan error, 1)
 
 		mudHandler := newMUDHandler(json)
-		streamHandler := newStreamHandler(closeChan)
+		heartbeatHandler := newHeartbeatHandler(closeChan)
 
 		// Strip / and prepend build, so that a file `a/b.js` would be
 		// found in web/build/a/b.js, but served from localhost:8080/a/b.js.
@@ -64,19 +65,19 @@ var viewCmd = &cobra.Command{
 
 		mux := http.NewServeMux()
 		mux.Handle("/mud", mudHandler)
-		mux.Handle("/heartbeat", streamHandler)
+		mux.Handle("/heartbeat", heartbeatHandler)
 		mux.Handle("/", webHandler)
 		mux.Handle("/*filepath", webHandler)
 
 		s := &http.Server{
-			Addr:           "localhost:8080",
+			Addr:           "localhost:8080", // TODO: make port configurable or use some random one
 			Handler:        mux,
 			ReadTimeout:    10 * time.Second,
 			WriteTimeout:   10 * time.Second,
 			MaxHeaderBytes: 1 << 20,
 		}
 
-		s.RegisterOnShutdown(streamHandler.Close)
+		s.RegisterOnShutdown(heartbeatHandler.Close)
 
 		go func() {
 			<-closeChan
@@ -84,16 +85,18 @@ var viewCmd = &cobra.Command{
 			ctx := context.Background()
 			ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 			defer cancel()
+			log.Println("shutting server down ...")
 			stopChan <- s.Shutdown(ctx)
 		}()
 
 		// TODO: add some more logging?
 
-		log.Println("serving at ...")
+		log.Println(fmt.Sprintf("serving MUD viewer at %s", s.Addr))
 		go s.ListenAndServe()
 
-		log.Println("go to ...")
-		go browser.OpenURL("http://localhost:8080/")
+		url := "http://localhost:8080/"
+		log.Println(fmt.Sprintf("go to %s", url))
+		go browser.OpenURL(url) // TODO: open in browser of choice?
 
 		err = <-stopChan
 
@@ -115,12 +118,12 @@ func newMUDHandler(json string) http.Handler {
 	}
 }
 
-type streamHandler struct {
-	es eventsource.EventSource
-	c  chan struct{}
+type heartbeatHandler struct {
+	es    eventsource.EventSource
+	close chan struct{}
 }
 
-func newStreamHandler(c chan struct{}) *streamHandler {
+func newHeartbeatHandler(c chan struct{}) *heartbeatHandler {
 	es := eventsource.New(
 		&eventsource.Settings{
 			Timeout:        2 * time.Second,
@@ -135,17 +138,17 @@ func newStreamHandler(c chan struct{}) *streamHandler {
 			}
 		},
 	)
-	return &streamHandler{
-		es: es,
-		c:  c,
+	return &heartbeatHandler{
+		es:    es,
+		close: c,
 	}
 }
 
-func (s *streamHandler) Close() {
+func (s *heartbeatHandler) Close() {
 	s.es.Close()
 }
 
-func (s *streamHandler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
+func (s *heartbeatHandler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 
 	numberOfConsumers := s.es.ConsumersCount()
 
@@ -169,7 +172,7 @@ func (s *streamHandler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 				break
 			}
 		}
-		s.c <- struct{}{}
+		s.close <- struct{}{}
 	}()
 
 }
