@@ -588,64 +588,6 @@ var network_data;
 var userAgent = navigator.userAgent.toLowerCase();
 network.ready_to_draw = false;
 
-
-if (userAgent.indexOf(' electron/') > -1) {
-    // in case we are running electron
-    function opengithub() {
-        // used in about.html page
-        var { shell } = require('electron');
-        let url = "https://github.com/vafa-Andalibi/mudvisualizer";
-        shell.openExternal(url);
-    }
-
-    require('electron').ipcRenderer.on('draw', (event, message) => {
-        d3.selectAll("svg > *").remove();
-        var remote = require('electron').remote;
-
-        network.ready_to_draw = false;
-        // let data = remote.getGlobal('sharedObj');
-        let sharedobj = JSON.parse(remote.getGlobal('sharedObj'));
-        for (var mudfile_idx in sharedobj) {
-            try {
-                network.add_mudfile(JSON.parse(sharedobj[mudfile_idx]));
-            } catch (e) {
-                let html_message = "<div style='text-align: left; padding: 5px;'>The following JSON file is not valid:</div>";
-                html_message += "<pre style='border: 1px solid #555555;text-align: left; overflow-x: auto;'>" + sharedobj[mudfile_idx] + "</pre>"
-                Swal.fire({
-                    type: 'error',
-                    title: 'Not a valid json file',
-                    showConfirmButton: true,
-                    html: html_message
-                });
-            }
-        }
-        // network.add_mudfile(JSON.parse(data));
-        network.create_network()
-
-        var interval = setInterval(function () {
-            if (network.ready_to_draw == false) {
-                return;
-            }
-            clearInterval(interval);
-            network_data = network.get_nodes_links_json();
-            mud_drawer(network_data);
-        }, 100);
-    })
-
-
-    require('electron').ipcRenderer.on('resize', (event, message) => {
-        width = window.innerWidth || document.documentElement.clientWidth || document.body.clientWidth;
-        height = window.innerHeight || document.documentElement.clientHeight || document.body.clientHeight;
-        d3.select("svg").attr("height", height);
-        d3.select("svg").attr("width", width);
-    })
-
-
-    require('electron').ipcRenderer.on('clearsvg', (event, message) => {
-        d3.selectAll("svg > *").remove();
-    });
-}
-
 // this is for fading in/out select mud-file menu
 var mudfile_select_menu_open = false;
 
@@ -778,13 +720,6 @@ function set_outgoing() {
 }
 
 set_outgoing();
-
-// used in about.html page
-function opengithub() {
-    const { shell } = require('electron');
-    let url = "https://github.com/vafa-Andalibi/mudvisualizer";
-    shell.openExternal(url);
-}
 
 function get_devices_names(arr) {
     let device_ids = [];
