@@ -18,8 +18,8 @@ builds:
     # Binary name.
     # Can be a path (e.g. `bin/app`) to wrap the binary in a directory.
     # Default is the name of the project directory.
-    # binary: "extase_{{.Tag}}_{{replace .Target "amd64" "test"}}"
     #binary: 'mud_{{.Tag}}_{{replace .Target "darwin" "macos"}}'
+    binary: 'mud_{{replace .Target "darwin" "macos"}}'
     # Custom environment variables to be set during the builds.
     # Default is empty.
     env:
@@ -33,8 +33,8 @@ builds:
     # For more info refer to: https://golang.org/doc/install/source#environment
     # Defaults are darwin and linux.
     goos:
-    #  - linux
-    #  - windows
+      - linux
+      - windows
       - darwin
     # Custom ldflags templates.
     # Default is `-s -w -X main.version={{.Version}} -X main.commit={{.Commit}} -X main.date={{.Date}} -X main.builtBy=goreleaser`.
@@ -67,17 +67,8 @@ archives:
     # Keys should be valid GOOSs or GOARCHs.
     # Values are the respective replacements.
     # Default is empty.
-    #replacements:
-    #  darwin: macos
-
-  # - id: extase_php
-  #   # Can be used to change the archive formats for specific GOOSs.
-  #   # Most common use case is to archive as zip on Windows.
-  #   # Default is empty.
-  #   format_overrides:
-  #     - goos: windows
-  #       format: zip
-
+    replacements:
+      darwin: macos
 
 # You may add the current tag source archive to the release as well. 
 # This is particularly useful if you want to sign it, for example.

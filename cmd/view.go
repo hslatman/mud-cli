@@ -39,7 +39,7 @@ var viewCmd = &cobra.Command{
 	Args:  cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 
-		filepath := args[0]
+		filepath := args[0] // TODO: allow the viewer to start without a file (files can be loaded in the viewer too)
 		mudfile, err := internal.ReadMUDFileFrom(filepath)
 		if err != nil {
 			return errors.Wrap(err, "could not get contents")
