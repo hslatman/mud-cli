@@ -1,6 +1,6 @@
 # mud-cli
 
-MUD CLI provides multiple utilities to work with [Manufacturer Usage Descriptions](https://datatracker.ietf.org/doc/rfc8520/) (RFC8520).
+`mud-cli` provides multiple utilities for working with [Manufacturer Usage Descriptions](https://datatracker.ietf.org/doc/rfc8520/) (RFC8520).
 
 ## Description
 
@@ -9,7 +9,7 @@ The access control policies described in a MUD file allow network controllers to
 
 ## Usage
 
-The mud-cli contains the following commands:
+`mud-cli` contains the following commands:
 
 * read - reads (and validates) a MUD file and prints the contents
 * validate - validates a MUD file
@@ -36,17 +36,32 @@ Available Commands:
   view        Provides a graphical view of a MUD file
 ```
 
+### Binary Verification
+
+`mud-cli` is signed using [Cosign](https://github.com/sigstore/cosign).
+This means that binaries can be verified as follows:
+
+```bash
+$ cosign verify-blob -key cosign.pub -signature mud-darwin-amd64.sig mud-darwin-amd64
+Verified OK
+```
+
+The public key (`cosign.pub`) is available in the repository. 
+Signature files and binaries are available from the [Releases](https://github.com/hslatman/mud-cli/releases) page.
+
 ### MUD Visualizer
 
 This project embeds [MUD Visualizer](https://github.com/iot-onboarding/mud-visualizer) for visualization of MUD files.
 
 ## Things that can be done
 
-* Fix (most) TODOs ... :-)
 * Improve README.md
-* Add 'Use' texts to commands
-* Builds for other platforms (currently only Darwin, Docker would be great; might need some changes or guidance in terms of files)
+* Add 'Use' texts with examples to commands
+* Building a Docker image (including Cosign signing)
+* Optimizing the binary size (i.e. UPX)
+* Embed version information in binary
 * Add tests
+* Fix (most, highest priority) TODOs ... :-)
 * Customize / improve the [MUD Visualizer](https://github.com/iot-onboarding/mud-visualizer)? It needs proper attribution, at least.
 * Add some more logging (with levels)
 * Replace calls to fmt with proper logging / output
@@ -54,4 +69,5 @@ This project embeds [MUD Visualizer](https://github.com/iot-onboarding/mud-visua
 * A command for generating MUD files (from pcap or some different way)
 * A command for editing MUD files (i.e. metadata)
 * A command that initializes a .mud directory inside user HOME, that is used for intermediate storage? If necessary, of course.
+* Allow setting a different location than the user home directory
 ...

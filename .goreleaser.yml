@@ -19,7 +19,7 @@ builds:
     # Can be a path (e.g. `bin/app`) to wrap the binary in a directory.
     # Default is the name of the project directory.
     #binary: 'mud_{{.Tag}}_{{replace .Target "darwin" "macos"}}'
-    binary: 'mud_{{replace .Target "darwin" "macos"}}'
+    binary: 'mud-{{ .Tag }}-{{replace .Target "_" "-"}}'
     # Custom environment variables to be set during the builds.
     # Default is empty.
     env:
@@ -41,6 +41,10 @@ builds:
     # .XXX variables come from GoReleaser name templates, see https://goreleaser.com/customization/templates/
     #ldflags:
     # - -s -w -X main.version={{.Tag}} -X main.date={{.Date}} -X main.goVersion={{.Env.GO_VERSION}} -X main.platform={{.Os}}/{{.Arch}} -X main.commit={{.Commit}}
+    hooks:
+      post:
+        #- upx "{{ .Path }}"
+        - sh -c "cosign sign-blob -key $COSIGN_KEY_LOCATION {{ .Path }} > dist/mud-{{ .Tag }}-{{replace .Target "_" "-"}}.sig"
 
 
 # The binaries built will be archived together with the README and LICENSE files into a tar.gz file.
@@ -67,8 +71,8 @@ archives:
     # Keys should be valid GOOSs or GOARCHs.
     # Values are the respective replacements.
     # Default is empty.
-    replacements:
-      darwin: macos
+    #replacements:
+    #  darwin: macos
 
 # You may add the current tag source archive to the release as well. 
 # This is particularly useful if you want to sign it, for example.
@@ -93,6 +97,8 @@ release:
   # Default is `{{.Tag}}`
   # .XXX variables come from GoReleaser name templates, see https://goreleaser.com/customization/templates/
   name_template: "{{.ProjectName}}-{{.Tag}}"
+  extra_files:
+    - glob: dist/*.sig
 
 
 # https://goreleaser.com/customization/checksum/

@@ -48,7 +48,7 @@ func LoadOrCreateKeyAndChain(chainFilepath, keyFilepath string) ([]*x509.Certifi
 		if !shouldContinue {
 			return nil, nil, errors.New("no private key available nor created")
 		}
-		certBytes, keyBytes, err := generateKey()
+		certBytes, keyBytes, err := generateKey() // TODO: return cert and key directly instead of bytes
 		if err != nil {
 			return nil, nil, errors.Wrap(err, "error generating new private key")
 		}
