@@ -59,6 +59,7 @@ This project embeds [MUD Visualizer](https://github.com/iot-onboarding/mud-visua
 * Add 'Use' texts with examples to commands
 * Building a Docker image (including Cosign signing)
 * Optimizing the binary size (i.e. UPX)
+* Embed version information in binary
 * Add tests
 * Fix (most, highest priority) TODOs ... :-)
 * Customize / improve the [MUD Visualizer](https://github.com/iot-onboarding/mud-visualizer)? It needs proper attribution, at least.

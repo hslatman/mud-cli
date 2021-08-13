@@ -19,7 +19,7 @@ builds:
     # Can be a path (e.g. `bin/app`) to wrap the binary in a directory.
     # Default is the name of the project directory.
     #binary: 'mud_{{.Tag}}_{{replace .Target "darwin" "macos"}}'
-    binary: 'mud-{{ .Tag }}-{{ .Target }}'
+    binary: 'mud-{{ .Tag }}-{{replace .Target "_" "-"}}'
     # Custom environment variables to be set during the builds.
     # Default is empty.
     env:
@@ -44,8 +44,7 @@ builds:
     hooks:
       post:
         #- upx "{{ .Path }}"
-        - sh -c "cosign sign-blob -key $COSIGN_KEY_LOCATION {{ .Path }} > dist/mud-{{ .Tag }}-{{ .Target }}.sig"
-
+        - sh -c "cosign sign-blob -key $COSIGN_KEY_LOCATION {{ .Path }} > dist/mud-{{ .Tag }}-{{replace .Target "_" "-"}}.sig"
 
 
 # The binaries built will be archived together with the README and LICENSE files into a tar.gz file.
@@ -72,8 +71,8 @@ archives:
     # Keys should be valid GOOSs or GOARCHs.
     # Values are the respective replacements.
     # Default is empty.
-    replacements:
-      darwin: macos
+    #replacements:
+    #  darwin: macos
 
 # You may add the current tag source archive to the release as well. 
 # This is particularly useful if you want to sign it, for example.
