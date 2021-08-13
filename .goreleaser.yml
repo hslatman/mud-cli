@@ -41,6 +41,11 @@ builds:
     # .XXX variables come from GoReleaser name templates, see https://goreleaser.com/customization/templates/
     #ldflags:
     # - -s -w -X main.version={{.Tag}} -X main.date={{.Date}} -X main.goVersion={{.Env.GO_VERSION}} -X main.platform={{.Os}}/{{.Arch}} -X main.commit={{.Commit}}
+    hooks:
+      post:
+        #- upx "{{ .Path }}"
+        - sh -c "cosign sign-blob -key $COSIGN_KEY_LOCATION {{ .Path }} > dist/{{ .ProjectName }}_{{ .Tag }}_{{ .Target }}.sig"
+
 
 
 # The binaries built will be archived together with the README and LICENSE files into a tar.gz file.
@@ -93,6 +98,8 @@ release:
   # Default is `{{.Tag}}`
   # .XXX variables come from GoReleaser name templates, see https://goreleaser.com/customization/templates/
   name_template: "{{.ProjectName}}-{{.Tag}}"
+  extra_files:
+    - glob: dist/*.sig
 
 
 # https://goreleaser.com/customization/checksum/
