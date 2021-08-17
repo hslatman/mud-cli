@@ -95,7 +95,7 @@ var viewCmd = &cobra.Command{
 		go s.ListenAndServe()
 
 		url := "http://localhost:8080/"
-		log.Println(fmt.Sprintf("go to %s", url))
+		log.Println(fmt.Sprintf("browser will open automatically (or go to %s)", url))
 		go browser.OpenURL(url) // TODO: open in browser of choice?
 
 		err = <-stopChan
@@ -109,6 +109,7 @@ type mudHandler struct {
 }
 
 func (m *mudHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	w.Header().Add("Content-Type", "application/json")
 	w.Write([]byte(m.json))
 }
 
