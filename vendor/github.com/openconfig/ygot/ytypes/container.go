@@ -19,7 +19,6 @@ import (
 	"reflect"
 	"strings"
 
-	log "github.com/golang/glog"
 	"github.com/kylelemons/godebug/pretty"
 	"github.com/openconfig/goyang/pkg/yang"
 	"github.com/openconfig/ygot/util"
@@ -107,12 +106,13 @@ func validateContainer(schema *yang.Entry, value ygot.GoStruct) util.Errors {
 }
 
 // unmarshalContainer unmarshals a JSON tree into a struct.
-//   schema is the schema of the schema node corresponding to the struct being
-//     unmarshaled into.
-//   parent is the parent struct, which must be a struct ptr.
-//   jsonTree is a JSON data tree which must be a map[string]interface{}.
-//   opts is the set of options that should be used when unmarshalling the JSON
-//     into the supplied parent.
+//
+// - schema is the schema of the schema node corresponding to the struct being
+// unmarshaled into.
+// - parent is the parent struct, which must be a struct ptr.
+// - jsonTree is a JSON data tree which must be a map[string]interface{}.
+// - opts is the set of options that should be used when unmarshalling the JSON
+// into the supplied parent.
 func unmarshalContainer(schema *yang.Entry, parent interface{}, jsonTree interface{}, enc Encoding, opts ...UnmarshalOpt) error {
 	if util.IsValueNil(jsonTree) {
 		return nil
@@ -141,10 +141,11 @@ func unmarshalContainer(schema *yang.Entry, parent interface{}, jsonTree interfa
 }
 
 // unmarshalStruct unmarshals a JSON tree into a struct.
-//   schema is the YANG schema of the node corresponding to the struct being
-//     unmarshalled into.
-//   parent is the parent struct, which must be a struct ptr.
-//   jsonTree is a JSON data tree which must be a map[string]interface{}.
+//
+// - schema is the YANG schema of the node corresponding to the struct being
+// unmarshalled into.
+// - parent is the parent struct, which must be a struct ptr.
+// - jsonTree is a JSON data tree which must be a map[string]interface{}.
 func unmarshalStruct(schema *yang.Entry, parent interface{}, jsonTree map[string]interface{}, enc Encoding, opts ...UnmarshalOpt) error {
 	destv := reflect.ValueOf(parent).Elem()
 	var allSchemaPaths [][]string
@@ -158,7 +159,6 @@ func unmarshalStruct(schema *yang.Entry, parent interface{}, jsonTree map[string
 		// Skip annotation fields since they do not have a schema.
 		// TODO(robjs): Implement unmarshalling annotations.
 		if util.IsYgotAnnotation(ft) {
-			log.Infof("ignoring annotation field %s during unmarshalling, unsupported", ft.Name)
 			// We need to find the paths that we should have unmarshalled here to avoid
 			// throwing errors to users whilst there is a TODO above.
 			paths, err := pathTagFromField(ft)
@@ -173,7 +173,11 @@ func unmarshalStruct(schema *yang.Entry, parent interface{}, jsonTree map[string
 			continue
 		}
 
-		cschema, err := util.ChildSchema(schema, ft)
+		childSchemaFn := util.ChildSchema
+		if hasPreferShadowPath(opts) {
+			childSchemaFn = util.ChildSchemaPreferShadow
+		}
+		cschema, err := childSchemaFn(schema, ft)
 		if err != nil {
 			return err
 		}
@@ -204,7 +208,7 @@ func unmarshalStruct(schema *yang.Entry, parent interface{}, jsonTree map[string
 		}
 		allSchemaPaths = append(allSchemaPaths, ssp...)
 
-		jsonValue, err := getJSONTreeValForField(schema, cschema, ft, jsonTree)
+		jsonValue, err := getJSONTreeValForField(schema, cschema, ft, jsonTree, hasPreferShadowPath(opts))
 		if err != nil {
 			return err
 		}
