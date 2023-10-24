@@ -5,7 +5,7 @@ Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
 
-    http://www.apache.org/licenses/LICENSE-2.0
+	http://www.apache.org/licenses/LICENSE-2.0
 
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
@@ -16,6 +16,7 @@ limitations under the License.
 package cmd
 
 import (
+	"fmt"
 	"io/ioutil"
 	"log"
 	"net/url"
@@ -24,11 +25,11 @@ import (
 	"strings"
 	"time"
 
-	cms "github.com/github/ietf-cms"
 	"github.com/hslatman/mud-cli/internal"
 	"github.com/hslatman/mud.yang.go/pkg/mudyang"
 	"github.com/openconfig/ygot/ygot"
 	"github.com/pkg/errors"
+	"github.com/smallstep/pkcs7"
 	"github.com/spf13/cobra"
 )
 
@@ -144,9 +145,31 @@ var signCmd = &cobra.Command{
 		// TODO: prevent signing with certificate that is no longer valid (or almost going to expire?)
 
 		// TODO: allow signing with some other signer, not based on key and cert file, too?
-		signature, err := cms.SignDetached(data, chain, signer)
+		toBeSigned, err := pkcs7.NewSignedData(data)
 		if err != nil {
-			return errors.Wrap(err, "signing data failed")
+			return fmt.Errorf("cannot initialize signed data: %w", err)
+		}
+		toBeSigned.SetDigestAlgorithm(pkcs7.OIDDigestAlgorithmSHA256)
+
+		switch len(chain) {
+		case 0:
+			return errors.New("no signer certificate available")
+		case 1:
+			if err = toBeSigned.AddSigner(chain[0], signer, pkcs7.SignerInfoConfig{}); err != nil {
+				return fmt.Errorf("cannot add signer: %w", err)
+			}
+		default:
+			if err = toBeSigned.AddSignerChain(chain[0], signer, chain[1:], pkcs7.SignerInfoConfig{}); err != nil {
+				return fmt.Errorf("cannot add signer: %w", err)
+			}
+		}
+
+		// create a detached signature
+		toBeSigned.Detach()
+
+		signature, err := toBeSigned.Finish()
+		if err != nil {
+			return fmt.Errorf("cannot finish signing data: %w", err)
 		}
 
 		// TODO: if MUD file is local file (not URL), the put it next to the MUD file?
