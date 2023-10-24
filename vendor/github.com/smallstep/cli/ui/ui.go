@@ -3,7 +3,7 @@ package ui
 import (
 	"fmt"
 	"os"
-	"strings"
+	"syscall"
 	"text/template"
 
 	"github.com/chzyer/readline"
@@ -35,41 +35,8 @@ func init() {
 	readline.Stdout = &stderr{}
 }
 
-// Print uses templates to print the arguments formated to os.Stderr.
-func Print(args ...interface{}) error {
-	var o options
-	opts, args := extractOptions(args)
-	o.apply(opts)
-
-	// Return with a default value. This is useful when we split the question
-	// and the response in two lines.
-	if o.value != "" && o.valid() {
-		return nil
-	}
-
-	text := fmt.Sprint(args...)
-	t, err := template.New("Print").Funcs(promptui.FuncMap).Parse(text)
-	if err != nil {
-		return errors.Wrap(err, "error parsing template")
-	}
-	if err := t.Execute(os.Stderr, nil); err != nil {
-		return errors.Wrap(err, "error executing template")
-	}
-	return nil
-}
-
 // Printf uses templates to print the string formated to os.Stderr.
 func Printf(format string, args ...interface{}) error {
-	var o options
-	opts, args := extractOptions(args)
-	o.apply(opts)
-
-	// Return with a default value. This is useful when we split the question
-	// and the response in two lines.
-	if o.value != "" && o.valid() {
-		return nil
-	}
-
 	text := fmt.Sprintf(format, args...)
 	t, err := template.New("Printf").Funcs(promptui.FuncMap).Parse(text)
 	if err != nil {
@@ -83,16 +50,6 @@ func Printf(format string, args ...interface{}) error {
 
 // Println uses templates to print the given arguments to os.Stderr
 func Println(args ...interface{}) error {
-	var o options
-	opts, args := extractOptions(args)
-	o.apply(opts)
-
-	// Return with a default value. This is useful when we split the question
-	// and the response in two lines.
-	if o.value != "" && o.valid() {
-		return nil
-	}
-
 	text := fmt.Sprintln(args...)
 	t, err := template.New("Println").Funcs(promptui.FuncMap).Parse(text)
 	if err != nil {
@@ -128,7 +85,7 @@ func PrintSelected(name, value string, opts ...Option) error {
 	return nil
 }
 
-// Prompt creates and runs a promptui.Prompt with the given label.
+// Prompt creates a runs a promptui.Prompt with the given label.
 func Prompt(label string, opts ...Option) (string, error) {
 	o := &options{
 		promptTemplates: PromptTemplates(),
@@ -161,7 +118,7 @@ func Prompt(label string, opts ...Option) (string, error) {
 	return value, nil
 }
 
-// PromptPassword creates and runs a promptui.Prompt with the given label. This
+// PromptPassword creates a runs a promptui.Prompt with the given label. This
 // prompt will mask the key entries with \r.
 func PromptPassword(label string, opts ...Option) ([]byte, error) {
 	// Using a not printable character as they work better than \r
@@ -198,7 +155,7 @@ func PromptPassword(label string, opts ...Option) ([]byte, error) {
 	return []byte(pass), nil
 }
 
-// PromptPasswordGenerate creates and runs a promptui.Prompt with the given label.
+// PromptPasswordGenerate creaes a runs a promptui.Prompt with the given label.
 // This prompt will mask the key entries with \r. If the result password length
 // is 0, it will generate a new prompt with a generated password that can be
 // edited.
@@ -216,24 +173,6 @@ func PromptPasswordGenerate(label string, opts ...Option) ([]byte, error) {
 		return nil, err
 	}
 	return []byte(passString), nil
-}
-
-// PromptYesNo creates and runs a promptui.Prompt with the given label, and
-// returns true if the answer is y/yes and false if the answer is n/no.
-func PromptYesNo(label string, opts ...Option) (bool, error) {
-	opts = append([]Option{WithValidateYesNo()}, opts...)
-	s, err := Prompt(label, opts...)
-	if err != nil {
-		return false, err
-	}
-	switch strings.ToLower(strings.TrimSpace(s)) {
-	case "y", "yes":
-		return true, nil
-	case "n", "no":
-		return false, nil
-	default:
-		return false, fmt.Errorf("%s is not a valid answer", s)
-	}
 }
 
 // Select creates and runs a promptui.Select with the given label and items.
@@ -263,7 +202,7 @@ func Select(label string, items interface{}, opts ...Option) (int, string, error
 
 func preparePromptTerminal() (func(), error) {
 	nothing := func() {}
-	if !readline.DefaultIsTerminal() {
+	if !readline.IsTerminal(syscall.Stdin) {
 		tty, err := os.Open("/dev/tty")
 		if err != nil {
 			return nothing, errors.Wrap(err, "error allocating terminal")
@@ -293,7 +232,7 @@ func preparePromptTerminal() (func(), error) {
 
 func prepareSelectTerminal() (func(), error) {
 	nothing := func() {}
-	if !readline.DefaultIsTerminal() {
+	if !readline.IsTerminal(syscall.Stdin) {
 		tty, err := os.Open("/dev/tty")
 		if err != nil {
 			return nothing, errors.Wrap(err, "error allocating terminal")

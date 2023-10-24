@@ -5,7 +5,7 @@ Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
 
-    http://www.apache.org/licenses/LICENSE-2.0
+	http://www.apache.org/licenses/LICENSE-2.0
 
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
@@ -17,12 +17,13 @@ package cmd
 
 import (
 	"crypto/x509"
+	"fmt"
 	"log"
 
-	cms "github.com/github/ietf-cms"
 	"github.com/hslatman/mud-cli/internal"
 	"github.com/hslatman/mud.yang.go/pkg/mudyang"
 	"github.com/pkg/errors"
+	"github.com/smallstep/pkcs7"
 	"github.com/spf13/cobra"
 	"go.step.sm/crypto/pemutil"
 )
@@ -62,10 +63,13 @@ var verifyCmd = &cobra.Command{
 			return errors.Wrap(err, "reading DER signature failed")
 		}
 
-		sd, err := cms.ParseSignedData(der)
+		p7, err := pkcs7.Parse(der)
 		if err != nil {
-			return errors.Wrap(err, "parsing signed data failed")
+			return fmt.Errorf("failed parsing signed data: %w", err)
 		}
+
+		// add the content, as it was detached before
+		p7.Content = data
 
 		var roots *x509.CertPool
 		if len(caBundle) > 0 {
@@ -75,12 +79,13 @@ var verifyCmd = &cobra.Command{
 			}
 		}
 
-		// TODO: more verify options? and stricter?
-		options := x509.VerifyOptions{
-			//CurrentTime: time.Date(2021, 7, 16, 10, 1, 1, 0, time.Local), // TODO: remove this fully; or make it some kind of option to skip the time check on the cert(s)?
-			Roots: roots,
-		}
-		if _, err := sd.VerifyDetached(data, options); err != nil {
+		// // TODO: more verify options? and stricter?
+		// options := x509.VerifyOptions{
+		// 	//CurrentTime: time.Date(2021, 7, 16, 10, 1, 1, 0, time.Local), // TODO: remove this fully; or make it some kind of option to skip the time check on the cert(s)?
+		// 	Roots: roots,
+		// }
+
+		if err := p7.VerifyWithChain(roots); err != nil {
 			return errors.Wrap(err, "verifying data failed")
 		}
 

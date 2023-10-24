@@ -2,9 +2,7 @@ package ui
 
 import (
 	"fmt"
-	"runtime"
 
-	"github.com/chzyer/readline"
 	"github.com/manifoldco/promptui"
 )
 
@@ -25,22 +23,6 @@ var (
 	// IconSelect is the icon used to identify the currently selected item in select mode.
 	IconSelect = promptui.Styler(promptui.FGBold)("▸")
 )
-
-func init() {
-	// Set VT100 characters for windows too
-	if runtime.GOOS == "windows" {
-		promptui.KeyEnter = readline.CharEnter
-		promptui.KeyBackspace = readline.CharBackspace
-		promptui.KeyPrev = readline.CharPrev
-		promptui.KeyPrevDisplay = "↑"
-		promptui.KeyNext = readline.CharNext
-		promptui.KeyNextDisplay = "↓"
-		promptui.KeyBackward = readline.CharBackward
-		promptui.KeyBackwardDisplay = "←"
-		promptui.KeyForward = readline.CharForward
-		promptui.KeyForwardDisplay = "→"
-	}
-}
 
 // PrintSelectedTemplate returns the default template used in PrintSelected.
 func PrintSelectedTemplate() string {

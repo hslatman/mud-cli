@@ -5,12 +5,12 @@ package pemutil
 
 import (
 	"bytes"
-	"crypto"
 	"crypto/ecdsa"
 	"crypto/ed25519"
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/rsa"
+	"crypto/sha256"
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
@@ -20,6 +20,7 @@ import (
 	"github.com/pkg/errors"
 	"go.step.sm/crypto/internal/utils"
 	"go.step.sm/crypto/keyutil"
+	"go.step.sm/crypto/x25519"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -43,6 +44,9 @@ var PromptPassword PasswordPrompter
 // ioutil.WriteFile, but it can be set to a custom method, that for example can
 // check if a file exists and prompts the user if it should be overwritten.
 var WriteFile FileWriter = utils.WriteFile
+
+// PEMBlockHeader is the expected header for any PEM formatted block.
+var PEMBlockHeader = []byte("-----BEGIN ")
 
 // context add options to the pem methods.
 type context struct {
@@ -73,6 +77,35 @@ func (c *context) apply(opts []Options) error {
 		}
 	}
 	return nil
+}
+
+// promptPassword returns the password or prompts for one.
+func (c *context) promptPassword() ([]byte, error) {
+	switch {
+	case len(c.password) > 0:
+		return c.password, nil
+	case c.passwordPrompter != nil:
+		return c.passwordPrompter(c.passwordPrompt)
+	case PromptPassword != nil:
+		return PromptPassword(fmt.Sprintf("Please enter the password to decrypt %s", c.filename))
+	default:
+		return nil, errors.Errorf("error decoding %s: key is password protected", c.filename)
+	}
+}
+
+// promptEncryptPassword returns the password or prompts for one if
+// WithPassword, WithPasswordFile or WithPasswordPrompt have been used. This
+// method is used to encrypt keys, and it will only use the options passed, it
+// will not use the global PromptPassword.
+func (c *context) promptEncryptPassword() ([]byte, error) {
+	switch {
+	case len(c.password) > 0:
+		return c.password, nil
+	case c.passwordPrompter != nil:
+		return c.passwordPrompter(c.passwordPrompt)
+	default:
+		return nil, nil
+	}
 }
 
 // Options is the type to add attributes to the context.
@@ -174,6 +207,76 @@ func WithFirstBlock() Options {
 	}
 }
 
+// ParseCertificate extracts the first certificate from the given pem.
+func ParseCertificate(pemData []byte) (*x509.Certificate, error) {
+	var block *pem.Block
+	for len(pemData) > 0 {
+		block, pemData = pem.Decode(pemData)
+		if block == nil {
+			return nil, errors.New("error decoding pem block")
+		}
+		if block.Type != "CERTIFICATE" || len(block.Headers) != 0 {
+			continue
+		}
+
+		cert, err := x509.ParseCertificate(block.Bytes)
+		if err != nil {
+			return nil, errors.Wrap(err, "error parsing certificate")
+		}
+		return cert, nil
+	}
+
+	return nil, errors.New("error parsing certificate: no certificate found")
+}
+
+// ParseCertificateBundle extracts all the certificates in the given data.
+func ParseCertificateBundle(pemData []byte) ([]*x509.Certificate, error) {
+	var block *pem.Block
+	var certs []*x509.Certificate
+	for len(pemData) > 0 {
+		block, pemData = pem.Decode(pemData)
+		if block == nil {
+			return nil, errors.New("error decoding pem block")
+		}
+		if block.Type != "CERTIFICATE" || len(block.Headers) != 0 {
+			continue
+		}
+
+		cert, err := x509.ParseCertificate(block.Bytes)
+		if err != nil {
+			return nil, errors.Wrap(err, "error parsing certificate")
+		}
+		certs = append(certs, cert)
+	}
+	if len(certs) == 0 {
+		return nil, errors.New("error parsing certificate: no certificate found")
+	}
+	return certs, nil
+}
+
+// ParseCertificateRequest extracts the first certificate from the given pem.
+func ParseCertificateRequest(pemData []byte) (*x509.CertificateRequest, error) {
+	var block *pem.Block
+	for len(pemData) > 0 {
+		block, pemData = pem.Decode(pemData)
+		if block == nil {
+			return nil, errors.New("error decoding pem block")
+		}
+		if (block.Type != "CERTIFICATE REQUEST" && block.Type != "NEW CERTIFICATE REQUEST") ||
+			len(block.Headers) != 0 {
+			continue
+		}
+
+		csr, err := x509.ParseCertificateRequest(block.Bytes)
+		if err != nil {
+			return nil, errors.Wrap(err, "error parsing certificate request")
+		}
+		return csr, nil
+	}
+
+	return nil, errors.New("error parsing certificate request: no certificate found")
+}
+
 // ReadCertificate returns a *x509.Certificate from the given filename. It
 // supports certificates formats PEM and DER.
 func ReadCertificate(filename string, opts ...Options) (*x509.Certificate, error) {
@@ -183,7 +286,7 @@ func ReadCertificate(filename string, opts ...Options) (*x509.Certificate, error
 	}
 
 	// PEM format
-	if bytes.HasPrefix(b, []byte("-----BEGIN ")) {
+	if bytes.Contains(b, PEMBlockHeader) {
 		var crt interface{}
 		crt, err = Read(filename, opts...)
 		if err != nil {
@@ -212,7 +315,7 @@ func ReadCertificateBundle(filename string) ([]*x509.Certificate, error) {
 	}
 
 	// PEM format
-	if bytes.HasPrefix(b, []byte("-----BEGIN ")) {
+	if bytes.Contains(b, PEMBlockHeader) {
 		var block *pem.Block
 		var bundle []*x509.Certificate
 		for len(b) > 0 {
@@ -253,7 +356,7 @@ func ReadCertificateRequest(filename string) (*x509.CertificateRequest, error) {
 	}
 
 	// PEM format
-	if bytes.HasPrefix(b, []byte("-----BEGIN ")) {
+	if bytes.Contains(b, PEMBlockHeader) {
 		csr, err := Parse(b, WithFilename(filename))
 		if err != nil {
 			return nil, err
@@ -283,27 +386,15 @@ func Parse(b []byte, opts ...Options) (interface{}, error) {
 	switch {
 	case block == nil:
 		return nil, errors.Errorf("error decoding %s: not a valid PEM encoded block", ctx.filename)
-	case len(rest) > 0 && !ctx.firstBlock:
-		return nil, errors.Errorf("error decoding %s: contains more than one PEM endoded block", ctx.filename)
+	case len(bytes.TrimSpace(rest)) > 0 && !ctx.firstBlock:
+		return nil, errors.Errorf("error decoding %s: contains more than one PEM encoded block", ctx.filename)
 	}
 
 	// PEM is encrypted: ask for password
 	if block.Headers["Proc-Type"] == "4,ENCRYPTED" || block.Type == "ENCRYPTED PRIVATE KEY" {
-		var err error
-		var pass []byte
-
-		if len(ctx.password) > 0 {
-			pass = ctx.password
-		} else if ctx.passwordPrompter != nil {
-			if pass, err = ctx.passwordPrompter(ctx.passwordPrompt); err != nil {
-				return nil, err
-			}
-		} else if PromptPassword != nil {
-			if pass, err = PromptPassword(fmt.Sprintf("Please enter the password to decrypt %s", ctx.filename)); err != nil {
-				return nil, err
-			}
-		} else {
-			return nil, errors.Errorf("error decoding %s: key is password protected", ctx.filename)
+		pass, err := ctx.promptPassword()
+		if err != nil {
+			return nil, err
 		}
 
 		block.Bytes, err = DecryptPEMBlock(block, pass)
@@ -334,6 +425,23 @@ func Parse(b []byte, opts ...Options) (interface{}, error) {
 	case "CERTIFICATE REQUEST", "NEW CERTIFICATE REQUEST":
 		csr, err := x509.ParseCertificateRequest(block.Bytes)
 		return csr, errors.Wrapf(err, "error parsing %s", ctx.filename)
+	case "ENCRYPTED COSIGN PRIVATE KEY":
+		pass, err := ctx.promptPassword()
+		if err != nil {
+			return nil, err
+		}
+		priv, err := ParseCosignPrivateKey(block.Bytes, pass)
+		return priv, errors.Wrapf(err, "error parsing %s", ctx.filename)
+	case "NEBULA X25519 PUBLIC KEY":
+		if len(block.Bytes) != x25519.PublicKeySize {
+			return nil, errors.Errorf("error parsing %s: key is not 32 bytes", ctx.filename)
+		}
+		return x25519.PublicKey(block.Bytes), nil
+	case "NEBULA X25519 PRIVATE KEY":
+		if len(block.Bytes) != x25519.PrivateKeySize {
+			return nil, errors.Errorf("error parsing %s: key is not 32 bytes", ctx.filename)
+		}
+		return x25519.PrivateKey(block.Bytes), nil
 	default:
 		return nil, errors.Errorf("error decoding %s: contains an unexpected header '%s'", ctx.filename, block.Type)
 	}
@@ -376,6 +484,7 @@ func Serialize(in interface{}, opts ...Options) (*pem.Block, error) {
 	}
 
 	var p *pem.Block
+	var isPrivateKey bool
 	switch k := in.(type) {
 	case *rsa.PublicKey, *ecdsa.PublicKey, ed25519.PublicKey:
 		b, err := x509.MarshalPKIXPublicKey(k)
@@ -387,6 +496,7 @@ func Serialize(in interface{}, opts ...Options) (*pem.Block, error) {
 			Bytes: b,
 		}
 	case *rsa.PrivateKey:
+		isPrivateKey = true
 		switch {
 		case ctx.pkcs8:
 			b, err := x509.MarshalPKCS8PrivateKey(k)
@@ -406,6 +516,7 @@ func Serialize(in interface{}, opts ...Options) (*pem.Block, error) {
 			}
 		}
 	case *ecdsa.PrivateKey:
+		isPrivateKey = true
 		switch {
 		case ctx.pkcs8:
 			b, err := x509.MarshalPKCS8PrivateKey(k)
@@ -429,6 +540,7 @@ func Serialize(in interface{}, opts ...Options) (*pem.Block, error) {
 			}
 		}
 	case ed25519.PrivateKey:
+		isPrivateKey = true
 		switch {
 		case !ctx.pkcs8 && ctx.openSSH:
 			return SerializeOpenSSHPrivateKey(k, withContext(ctx))
@@ -457,20 +569,28 @@ func Serialize(in interface{}, opts ...Options) (*pem.Block, error) {
 		return nil, errors.Errorf("cannot serialize type '%T', value '%v'", k, k)
 	}
 
-	// Apply options on the PEM blocks.
-	if ctx.password != nil {
-		if _, ok := in.(crypto.PrivateKey); ok && ctx.pkcs8 {
-			var err error
-			p, err = EncryptPKCS8PrivateKey(rand.Reader, p.Bytes, ctx.password, DefaultEncCipher)
-			if err != nil {
-				return nil, err
-			}
-		} else {
-			var err error
-			// nolint:staticcheck
-			p, err = x509.EncryptPEMBlock(rand.Reader, p.Type, p.Bytes, ctx.password, DefaultEncCipher)
-			if err != nil {
-				return nil, errors.Wrap(err, "failed to serialize to PEM")
+	if isPrivateKey {
+		// Request password if needed.
+		password, err := ctx.promptEncryptPassword()
+		if err != nil {
+			return nil, err
+		}
+
+		// Apply options on the PEM blocks.
+		if password != nil {
+			if ctx.pkcs8 {
+				var err error
+				p, err = EncryptPKCS8PrivateKey(rand.Reader, p.Bytes, password, DefaultEncCipher)
+				if err != nil {
+					return nil, err
+				}
+			} else {
+				var err error
+				//nolint:staticcheck // required for legacy compatibility
+				p, err = x509.EncryptPEMBlock(rand.Reader, p.Type, p.Bytes, password, DefaultEncCipher)
+				if err != nil {
+					return nil, errors.Wrap(err, "failed to serialize to PEM")
+				}
 			}
 		}
 	}
@@ -587,4 +707,36 @@ func ParseSSH(b []byte) (interface{}, error) {
 	default:
 		return nil, errors.Errorf("unsupported key type %T", key)
 	}
+}
+
+// BundleCertificate adds PEM-encoded certificates to a PEM-encoded certificate
+// bundle if not already in the bundle.
+func BundleCertificate(bundlePEM []byte, certsPEM ...[]byte) ([]byte, bool, error) {
+	bundle, err := ParseCertificateBundle(bundlePEM)
+	if err != nil {
+		return nil, false, fmt.Errorf("invalid bundle: %w", err)
+	}
+
+	sums := make(map[[sha256.Size224]byte]bool, len(bundle)+len(certsPEM))
+	for i := range bundle {
+		sums[sha256.Sum224(bundle[i].Raw)] = true
+	}
+
+	modified := false
+
+	for i := range certsPEM {
+		cert, err := ParseCertificate(certsPEM[i])
+		if err != nil {
+			return nil, false, fmt.Errorf("invalid certificate %d: %w", i, err)
+		}
+		certSum := sha256.Sum224(cert.Raw)
+		if sums[certSum] {
+			continue
+		}
+		sums[certSum] = true
+		bundlePEM = append(bundlePEM, certsPEM[i]...)
+		modified = true
+	}
+
+	return bundlePEM, modified, nil
 }
