@@ -16,7 +16,6 @@ limitations under the License.
 package internal
 
 import (
-	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -65,7 +64,7 @@ func Parse(data []byte) (*mudyang.Mudfile, error) {
 	mud := &mudyang.Mudfile{}
 	// TODO: provide options for unmarshaling?
 	if err := mudyang.Unmarshal(data, mud); err != nil {
-		return nil, errors.Wrap(err, "can't unmarshal JSON")
+		return nil, fmt.Errorf("failed to unmarshal JSON: %w", err)
 	}
 	return mud, nil
 }
@@ -73,7 +72,7 @@ func Parse(data []byte) (*mudyang.Mudfile, error) {
 func ReadMUDFileFrom(filepath string) (*mudyang.Mudfile, error) {
 	json, err := Read(filepath)
 	if err != nil {
-		return nil, errors.Wrap(err, "error reading file contents")
+		return nil, fmt.Errorf("failed reading file contents: %w", err)
 	}
 	return Parse(json)
 }

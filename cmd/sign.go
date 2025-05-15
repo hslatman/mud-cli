@@ -50,23 +50,23 @@ var signCmd = &cobra.Command{
 		filepath := args[0]
 		data, err := internal.Read(filepath)
 		if err != nil {
-			return errors.Wrapf(err, "error reading contents of %s", filepath)
+			return fmt.Errorf("error reading contents of %q: %w", filepath, err)
 		}
 		mudfile, err := internal.Parse(data)
 		if err != nil {
-			return errors.Wrap(err, "could not get contents")
+			return fmt.Errorf("could not get contents: %w", err)
 		}
 		if normalizeFlag {
 			json, err := internal.JSON(mudfile)
 			if err != nil {
-				return errors.Wrap(err, "normalizing MUD file failed")
+				return fmt.Errorf("normalizing MUD file failed: %w", err)
 			}
 			data = []byte(json)
 		}
 
 		existingMudUrl, err := internal.MUDURL(mudfile)
 		if err != nil {
-			return errors.Wrap(err, "retrieving MUD URL from MUD failed")
+			return fmt.Errorf("retrieving MUD URL from MUD failed: %w", err)
 		}
 
 		// TODO: look into this logic: if a signature path is know, the signature may already
@@ -82,12 +82,12 @@ var signCmd = &cobra.Command{
 
 		mudFilename, err := internal.MUDFilename(filepath)
 		if err != nil {
-			return errors.Wrap(err, "retrieving MUD filename failed")
+			return fmt.Errorf("retrieving MUD filename failed: %w", err)
 		}
 
 		signatureFilename, err := internal.SignatureFilename(filepath)
 		if err != nil {
-			return errors.Wrap(err, "retrieving signature path from MUD failed")
+			return fmt.Errorf("retrieving signature path from MUD failed: %w", err)
 		}
 
 		newMudURL := existingMudUrl
@@ -96,17 +96,17 @@ var signCmd = &cobra.Command{
 		if baseURLFlag != "" {
 			newMudURL, err = rewriteBase(newMudURL, baseURLFlag)
 			if err != nil {
-				return errors.Wrap(err, "rewriting base URL for MUD URL failed")
+				return fmt.Errorf("rewriting base URL for MUD URL failed: %w", err)
 			}
 			newSignatureURL, err = rewriteBase(newSignatureURL, baseURLFlag)
 			if err != nil {
-				return errors.Wrap(err, "rewriting base URL for MUD signature URL failed")
+				return fmt.Errorf("rewriting base URL for MUD signature URL failed: %w", err)
 			}
 		}
 
 		copy, err := ygot.DeepCopy(mudfile)
 		if err != nil {
-			return errors.Wrap(err, "creating deep copy of MUD YANG representation failed")
+			return fmt.Errorf("creating deep copy of MUD YANG representation failed: %w", err)
 		}
 
 		copyMUDFile, ok := copy.(*mudyang.Mudfile)
@@ -122,7 +122,7 @@ var signCmd = &cobra.Command{
 
 		diff, err := ygot.Diff(mudfile, copyMUDFile)
 		if err != nil {
-			return errors.Wrap(err, "diffing the input and output MUD file failed")
+			return fmt.Errorf("diffing the input and output MUD file failed: %w", err)
 		}
 
 		// TODO: can the diff be printed nicely (easily)? It seems to be some text values ...
@@ -134,14 +134,14 @@ var signCmd = &cobra.Command{
 			copyMUDFile.Mud.LastUpdate = &now
 			json, err := internal.JSON(copyMUDFile)
 			if err != nil {
-				return errors.Wrap(err, "getting JSON representation of MUD file failed")
+				return fmt.Errorf("getting JSON representation of MUD file failed: %w", err)
 			}
 			data = []byte(json)
 		}
 
 		chain, signer, err := internal.LoadOrCreateKeyAndChain(chainFilepathFlag, keyFilepathFlag)
 		if err != nil {
-			return errors.Wrap(err, "loading/creating private key failed")
+			return fmt.Errorf("loading/creating private key failed: %w", err)
 		}
 
 		// TODO: prevent signing with certificate that is no longer valid (or almost going to expire?)
@@ -184,7 +184,7 @@ var signCmd = &cobra.Command{
 		newSignatureFilepath := fp.Join(outputDir, signatureFilename)
 		err = ioutil.WriteFile(newSignatureFilepath, signature, 0644)
 		if err != nil {
-			return errors.Wrap(err, "writing DER signature failed")
+			return fmt.Errorf("writing DER signature failed: %w", err)
 		}
 
 		log.Printf("MUD signature successfully written to %s\n", newSignatureFilepath)
@@ -193,7 +193,7 @@ var signCmd = &cobra.Command{
 			newMUDFilepath := fp.Join(outputDir, mudFilename)
 			err = ioutil.WriteFile(newMUDFilepath, data, 0644)
 			if err != nil {
-				return errors.Wrap(err, "writing DER signature failed")
+				return fmt.Errorf("writing DER signature failed: %w", err)
 			}
 			log.Printf("Updated MUD file written to %s\n", newMUDFilepath)
 		}

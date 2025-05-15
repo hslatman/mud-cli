@@ -16,7 +16,7 @@ limitations under the License.
 package internal
 
 import (
-	"errors"
+	"fmt"
 
 	"github.com/openconfig/ygot/ygot"
 
@@ -33,7 +33,7 @@ func JSON(mudfile *mudyang.Mudfile) (string, error) {
 		SkipValidation: false, // TODO: provide flag to skip?
 	})
 	if err != nil {
-		return "", errors.Wrap(err, "could not marshal MUD file into JSON")
+		return "", fmt.Errorf("could not marshal MUD file into JSON: %w", err)
 	}
 	// TODO: ygot will alphabetically order properties (mapJSON); do we want some
 	// way to override this, so that the informational parts can be shown in the top?

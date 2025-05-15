@@ -6,15 +6,15 @@ require (
 	github.com/antage/eventsource v0.0.0-20190412115600-84b661236871
 	github.com/hslatman/go-mudyang v0.7.0
 	github.com/openconfig/ygot v0.31.0
-	github.com/pkg/browser v0.0.0-20210911075715-681adbf594b8
-	github.com/smallstep/cli v0.12.0
+	github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c
+	github.com/smallstep/cli-utils v0.12.1
 	github.com/smallstep/pkcs7 v0.0.0-20231024181729-3b98ecc1ca81
 	github.com/spf13/cobra v1.9.1
-	go.step.sm/crypto v0.35.1
+	go.step.sm/crypto v0.58.0
 )
 
 require (
-	filippo.io/edwards25519 v1.0.0 // indirect
+	filippo.io/edwards25519 v1.1.0 // indirect
 	github.com/chzyer/readline v1.5.1 // indirect
 	github.com/golang/glog v1.2.5 // indirect
 	github.com/google/go-cmp v0.7.0 // indirect

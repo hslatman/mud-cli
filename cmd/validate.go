@@ -16,7 +16,6 @@ limitations under the License.
 package cmd
 
 import (
-	"errors"
 	"fmt"
 
 	"github.com/spf13/cobra"
@@ -34,12 +33,12 @@ var validateCmd = &cobra.Command{
 		filepath := args[0]
 		mudfile, err := internal.ReadMUDFileFrom(filepath)
 		if err != nil {
-			return errors.Wrapf(err, "could not get contents from %s", filepath)
+			return fmt.Errorf("could not get contents from %q: %w", filepath, err)
 		}
 
 		err = internal.Validate(mudfile)
 		if err != nil {
-			return errors.Wrap(err, "error validating MUD file")
+			return fmt.Errorf("error validating MUD file: %w", err)
 		}
 
 		// TODO: some way to get more errors at once, if possible? Or some nicer output.

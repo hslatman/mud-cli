@@ -16,7 +16,6 @@ limitations under the License.
 package cmd
 
 import (
-	"errors"
 	"fmt"
 
 	"github.com/spf13/cobra"
@@ -34,12 +33,12 @@ var readCmd = &cobra.Command{
 		filepath := args[0]
 		mudfile, err := internal.ReadMUDFileFrom(filepath)
 		if err != nil {
-			return errors.Wrap(err, "could not get contents")
+			return fmt.Errorf("could not get contents: %w", err)
 		}
 
 		json, err := internal.JSON(mudfile)
 		if err != nil {
-			return errors.Wrap(err, "getting JSON representation of MUD file failed")
+			return fmt.Errorf("getting JSON representation of MUD file failed: %w", err)
 		}
 
 		// TODO: provide ways to show different info? Like a summary?

@@ -17,7 +17,6 @@ package cmd
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -43,12 +42,12 @@ var viewCmd = &cobra.Command{
 		filepath := args[0] // TODO: allow the viewer to start without a file (files can be loaded in the viewer too)
 		mudfile, err := internal.ReadMUDFileFrom(filepath)
 		if err != nil {
-			return errors.Wrap(err, "could not get contents")
+			return fmt.Errorf("could not get contents: %w", err)
 		}
 
 		json, err := internal.JSON(mudfile)
 		if err != nil {
-			return errors.Wrap(err, "getting JSON representation of MUD file failed")
+			return fmt.Errorf("getting JSON representation of MUD file failed: %w", err)
 		}
 
 		// TODO: provide option to show it in terminal with some ASCII art?
