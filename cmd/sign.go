@@ -16,6 +16,7 @@ limitations under the License.
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -25,12 +26,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hslatman/mud-cli/internal"
-	"github.com/hslatman/mud.yang.go/pkg/mudyang"
 	"github.com/openconfig/ygot/ygot"
-	"github.com/pkg/errors"
 	"github.com/smallstep/pkcs7"
 	"github.com/spf13/cobra"
+
+	"github.com/hslatman/go-mudyang"
+
+	"github.com/hslatman/mud-cli/internal"
 )
 
 var baseURLFlag string

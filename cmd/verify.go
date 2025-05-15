@@ -17,15 +17,17 @@ package cmd
 
 import (
 	"crypto/x509"
+	"errors"
 	"fmt"
 	"log"
 
-	"github.com/hslatman/mud-cli/internal"
-	"github.com/hslatman/mud.yang.go/pkg/mudyang"
-	"github.com/pkg/errors"
 	"github.com/smallstep/pkcs7"
 	"github.com/spf13/cobra"
 	"go.step.sm/crypto/pemutil"
+
+	"github.com/hslatman/go-mudyang"
+
+	"github.com/hslatman/mud-cli/internal"
 )
 
 var signatureFlag string
