@@ -5,7 +5,7 @@ Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
 
-    http://www.apache.org/licenses/LICENSE-2.0
+	http://www.apache.org/licenses/LICENSE-2.0
 
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
@@ -18,7 +18,6 @@ package cmd
 import (
 	"fmt"
 
-	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
 	"github.com/hslatman/mud-cli/internal"
@@ -34,12 +33,12 @@ var readCmd = &cobra.Command{
 		filepath := args[0]
 		mudfile, err := internal.ReadMUDFileFrom(filepath)
 		if err != nil {
-			return errors.Wrap(err, "could not get contents")
+			return fmt.Errorf("could not get contents: %w", err)
 		}
 
 		json, err := internal.JSON(mudfile)
 		if err != nil {
-			return errors.Wrap(err, "getting JSON representation of MUD file failed")
+			return fmt.Errorf("getting JSON representation of MUD file failed: %w", err)
 		}
 
 		// TODO: provide ways to show different info? Like a summary?

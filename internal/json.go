@@ -5,7 +5,7 @@ Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
 
-    http://www.apache.org/licenses/LICENSE-2.0
+	http://www.apache.org/licenses/LICENSE-2.0
 
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
@@ -16,9 +16,11 @@ limitations under the License.
 package internal
 
 import (
-	"github.com/hslatman/mud.yang.go/pkg/mudyang"
+	"fmt"
+
 	"github.com/openconfig/ygot/ygot"
-	"github.com/pkg/errors"
+
+	"github.com/hslatman/go-mudyang"
 )
 
 func JSON(mudfile *mudyang.Mudfile) (string, error) {
@@ -31,7 +33,7 @@ func JSON(mudfile *mudyang.Mudfile) (string, error) {
 		SkipValidation: false, // TODO: provide flag to skip?
 	})
 	if err != nil {
-		return "", errors.Wrap(err, "could not marshal MUD file into JSON")
+		return "", fmt.Errorf("could not marshal MUD file into JSON: %w", err)
 	}
 	// TODO: ygot will alphabetically order properties (mapJSON); do we want some
 	// way to override this, so that the informational parts can be shown in the top?

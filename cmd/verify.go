@@ -17,15 +17,17 @@ package cmd
 
 import (
 	"crypto/x509"
+	"errors"
 	"fmt"
 	"log"
 
-	"github.com/hslatman/mud-cli/internal"
-	"github.com/hslatman/mud.yang.go/pkg/mudyang"
-	"github.com/pkg/errors"
 	"github.com/smallstep/pkcs7"
 	"github.com/spf13/cobra"
 	"go.step.sm/crypto/pemutil"
+
+	"github.com/hslatman/go-mudyang"
+
+	"github.com/hslatman/mud-cli/internal"
 )
 
 var signatureFlag string
@@ -39,28 +41,28 @@ var verifyCmd = &cobra.Command{
 		filepath := args[0]
 		data, err := internal.Read(filepath)
 		if err != nil {
-			errors.Wrapf(err, "error reading contents of %s", filepath)
+			fmt.Errorf("error reading contents of %q: %w", filepath, err)
 		}
 		mudfile, err := internal.Parse(data)
 		if err != nil {
-			return errors.Wrap(err, "could not get contents")
+			return fmt.Errorf("could not get contents: %w", err)
 		}
 		signaturePath, err := getSignatureFilepath(mudfile)
 		if err != nil {
-			return errors.Wrap(err, "retrieving signature from MUD failed")
+			return fmt.Errorf("retrieving signature from MUD failed: %w", err)
 		}
 
 		var caBundle []*x509.Certificate
 		if caBundleFilepathFlag != "" {
 			caBundle, err = pemutil.ReadCertificateBundle(caBundleFilepathFlag)
 			if err != nil {
-				return errors.Wrapf(err, "reading certificate from %s failed", caBundleFilepathFlag)
+				return fmt.Errorf("reading certificate from %q failed: %w", caBundleFilepathFlag, err)
 			}
 		}
 
 		der, err := internal.Read(signaturePath)
 		if err != nil {
-			return errors.Wrap(err, "reading DER signature failed")
+			return fmt.Errorf("reading DER signature failed: %w", err)
 		}
 
 		p7, err := pkcs7.Parse(der)
@@ -86,7 +88,7 @@ var verifyCmd = &cobra.Command{
 		// }
 
 		if err := p7.VerifyWithChain(roots); err != nil {
-			return errors.Wrap(err, "verifying data failed")
+			return fmt.Errorf("verifying data failed: %w", err)
 		}
 
 		log.Println("MUD verified successfully")

@@ -5,7 +5,7 @@ Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
 
-    http://www.apache.org/licenses/LICENSE-2.0
+	http://www.apache.org/licenses/LICENSE-2.0
 
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
@@ -20,13 +20,13 @@ import (
 	"crypto/rand"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"errors"
 	"fmt"
 	"math/big"
 	"os"
 	"time"
 
-	"github.com/pkg/errors"
-	"github.com/smallstep/cli/ui"
+	"github.com/smallstep/cli-utils/ui"
 	"go.step.sm/crypto/keyutil"
 	"go.step.sm/crypto/pemutil"
 )
@@ -39,31 +39,31 @@ func LoadOrCreateKeyAndChain(chainFilepath, keyFilepath string) ([]*x509.Certifi
 	if !fileExists(keyFilepath) {
 		// TODO: split logic for the key and chain/cert? Or make clear that this is for testing/demo purposes?
 		shouldContinue, err := ui.PromptYesNo(
-			fmt.Sprintf("key at %s does not exist; create a new one?", keyFilepath),
+			fmt.Sprintf("key at %q does not exist; create a new one?", keyFilepath),
 			ui.WithRichPrompt(),
 		)
 		if err != nil {
-			return nil, nil, errors.Wrap(err, "error prompting user")
+			return nil, nil, fmt.Errorf("error prompting user: %w", err)
 		}
 		if !shouldContinue {
 			return nil, nil, errors.New("no private key available nor created")
 		}
 		certBytes, keyBytes, err := generateKey() // TODO: return cert and key directly instead of bytes
 		if err != nil {
-			return nil, nil, errors.Wrap(err, "error generating new private key")
+			return nil, nil, fmt.Errorf("error generating new private key: %w", err)
 		}
 		cert, err = x509.ParseCertificate(certBytes)
 		if err != nil {
-			return nil, nil, errors.Wrap(err, "parsing certificate failed")
+			return nil, nil, fmt.Errorf("parsing certificate failed: %w", err)
 		}
 		_, err = pemutil.Serialize(cert, pemutil.ToFile(chainFilepath, 0600))
 		if err != nil {
-			return nil, nil, errors.Wrapf(err, "serializing certificate to %s failed", chainFilepath)
+			return nil, nil, fmt.Errorf("serializing certificate to %q failed: %w", chainFilepath, err)
 		}
 		chain = []*x509.Certificate{cert}
 		key, err = x509.ParsePKCS8PrivateKey(keyBytes)
 		if err != nil {
-			return nil, nil, errors.Wrap(err, "parsing private key failed")
+			return nil, nil, fmt.Errorf("parsing private key failed: %w", err)
 		}
 		options := []pemutil.Options{}
 		options = append(options, pemutil.ToFile(keyFilepath, 0600))
@@ -72,28 +72,28 @@ func LoadOrCreateKeyAndChain(chainFilepath, keyFilepath string) ([]*x509.Certifi
 			ui.WithRichPrompt(),
 		)
 		if err != nil {
-			return nil, nil, errors.Wrap(err, "error prompting user for password")
+			return nil, nil, fmt.Errorf("error prompting user for password: %w", err)
 		}
 		options = append(options, pemutil.WithPassword(password))
 		_, err = pemutil.Serialize(key, options...)
 		if err != nil {
-			return nil, nil, errors.Wrapf(err, "serializing private key to %s failed", keyFilepath)
+			return nil, nil, fmt.Errorf("serializing private key to %q failed: %w", keyFilepath, err)
 		}
 	} else {
 		chain, err = pemutil.ReadCertificateBundle(chainFilepath)
 		if err != nil {
-			return nil, nil, errors.Wrap(err, "parsing certificate(s) failed")
+			return nil, nil, fmt.Errorf("parsing certificate(s) failed: %w", err)
 		}
 		options := []pemutil.Options{}
 		options = append(options, pemutil.WithPasswordPrompt(
-			fmt.Sprintf("Please enter the password to decrypt %s", keyFilepath),
+			fmt.Sprintf("Please enter the password to decrypt %q", keyFilepath),
 			func(s string) ([]byte, error) {
 				return ui.PromptPassword(s)
 			}),
 		)
 		key, err = pemutil.Read(keyFilepath, options...)
 		if err != nil {
-			return nil, nil, errors.Wrapf(err, "reading private key from %s failed", keyFilepath)
+			return nil, nil, fmt.Errorf("reading private key from %q failed: %w", keyFilepath, err)
 		}
 	}
 	signer, ok := key.(crypto.Signer)
